@@ -830,9 +830,6 @@ void cnmStaFreeAllStaByNetwork(struct ADAPTER *prAdapter, uint8_t ucBssIndex,
 	uint16_t i;
 	enum ENUM_STA_REC_CMD_ACTION eAction;
 
-	log_dbg(CNM, INFO, "BssIdx=%d, StaRecIndexExcluded=%d\n",
-		ucBssIndex, ucStaRecIndexExcluded);
-
 	if (ucBssIndex >= prAdapter->ucHwBssIdNum)
 		return;
 
@@ -846,6 +843,11 @@ void cnmStaFreeAllStaByNetwork(struct ADAPTER *prAdapter, uint8_t ucBssIndex,
 	cnmStaSendRemoveCmd(prAdapter,
 		eAction,
 		ucStaRecIndexExcluded, ucBssIndex);
+
+#if (CFG_SUPPORT_802_11BE_MLO == 1)
+	mldBssTeardownAllClients(prAdapter,
+		mldBssGetByBss(prAdapter, prBssInfo));
+#endif
 
 	for (i = 0; i < CFG_STA_REC_NUM; i++) {
 		prStaRec = (struct STA_RECORD *) &prAdapter->arStaRec[i];
@@ -904,22 +906,6 @@ struct STA_RECORD *cnmGetStaRecByIndex(struct ADAPTER *prAdapter,
 		prStaRec = NULL;
 
 	return prStaRec;
-}
-
-/*----------------------------------------------------------------------------*/
-/*!
- * \brief
- *
- * \param[in]
- *
- * \return none
- */
-/*----------------------------------------------------------------------------*/
-struct STA_RECORD *cnmGetStaRecByWlanIndex(struct ADAPTER *prAdapter,
-	uint8_t ucWlanIndex)
-{
-	return cnmGetStaRecByIndex(prAdapter,
-		secGetStaIdxByWlanIdx(prAdapter, ucWlanIndex));
 }
 
 /*----------------------------------------------------------------------------*/

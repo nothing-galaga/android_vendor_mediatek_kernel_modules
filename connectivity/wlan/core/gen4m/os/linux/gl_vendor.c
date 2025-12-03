@@ -5372,7 +5372,7 @@ int mtk_cfg80211_vendor_event_reset_triggered(
 	struct wireless_dev *wdev = gprWdev[0];
 	struct sk_buff *skb;
 
-	if (!wiphy || !wdev || !wdev->netdev) {
+	if (!wiphy || !wdev || !wdev->netdev || !data) {
 		DBGLOG(REQ, ERROR, "%s wrong input parameters\n", __func__);
 		return -EINVAL;
 	}

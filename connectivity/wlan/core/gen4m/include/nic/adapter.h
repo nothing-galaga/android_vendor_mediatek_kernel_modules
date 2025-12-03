@@ -573,11 +573,9 @@ struct BSS_INFO {
 
 #if CFG_SUPPORT_DFS
 	struct TIMER rCsaTimer;
-	struct TIMER rCsaDoneTimer;
 	struct SWITCH_CH_AND_BAND_PARAMS CSAParams;
 	uint8_t ucVhtChannelWidthBeforeCsa;
 	uint8_t fgIsAisSwitchingChnl;
-	uint8_t fgIsAisCsaPending;
 #endif
 
 	u_int8_t fgEnableH2E;
@@ -594,12 +592,6 @@ struct BSS_INFO {
 #if CFG_SUPPORT_REPLAY_DETECTION
 	struct GL_DETECT_REPLAY_INFO rDetRplyInfo;
 #endif
-
-	u_int8_t fgIsApGoStarted;
-
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-	struct TIMER rP2pApGoCarrierOnTimer;
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
 };
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
@@ -614,9 +606,6 @@ struct MLD_BSS_INFO {
 	uint8_t aucOwnMldAddr[MAC_ADDR_LEN];
 	uint8_t ucBssBitmap;
 	uint8_t ucHwBandBitmap; /* BIT(i), i = prBssInfo->eBandIdx */
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-	uint8_t fgIsSbMlsr; /* single band MLSR 5+6 */
-#endif /* CFG_SINGLE_BAND_MLSR_56 */
 	uint8_t ucMaxSimuLinks;
 	uint8_t ucEmlEnabled;
 	uint16_t u2EMLCap;
@@ -1318,8 +1307,7 @@ struct WIFI_VAR {
 #endif
 	uint8_t ucDisallowP2PAcs6G;
 	uint32_t u4BtmDelta;
-	uint32_t u4BtmDisThreshold;
-	uint32_t u4BtmTimerThreshold;
+	uint32_t u4BtmDisTimerThreshold;
 #if ARP_MONITER_ENABLE
 	uint32_t uArpMonitorNumber;
 	uint32_t uArpMonitorRxPktNum;
@@ -1499,7 +1487,6 @@ struct WIFI_VAR {
 	u_int8_t fgEnOnlyScan6g;
 #endif
 	uint8_t ucCsaDeauthClient;
-	uint8_t ucCsaDoneTimeout;
 
 #define LATENCY_STATS_MAX_SLOTS 5
 #define INVALID_TX_DELAY 0xFFFFFFFF
@@ -1659,9 +1646,6 @@ struct WIFI_VAR {
 	/* throughput factor log lv 2 dump period unit:ms */
 	uint32_t u4TputFactorDumpThresh;
 	/* throughput factor dump threshold unit:mbps */
-#endif
-#if (CFG_SUPPORT_WIFI_6G_PWR_MODE == 1)
-	uint8_t fgSpPwrLmtBackoff;
 #endif
 };
 

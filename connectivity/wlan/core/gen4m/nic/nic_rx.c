@@ -214,9 +214,6 @@ struct RX_EVENT_HANDLER arEventTable[] = {
 #if CFG_SUPPORT_WIFI_POWER_METRICS
 	{EVENT_ID_POWER_METRICS, nicEventPowerMetricsStatGetInfo},
 #endif
-#if (CFG_HW_DETECT_REPORT == 1)
-	{EVENT_ID_HW_DETECT_REPROT, nicEventHwDetectReport},
-#endif
 };
 
 uint32_t arEventTableSize = ARRAY_SIZE(arEventTable);
@@ -1264,7 +1261,7 @@ void nicRxProcessPktWithoutReorder(struct ADAPTER
 			       prSwRfb->aeCSUM) != WLAN_STATUS_SUCCESS) {
 		DBGLOG(RX, ERROR,
 		       "kalProcessRxPacket return value != WLAN_STATUS_SUCCESS\n");
-		RX_INC_CNT(&prAdapter->rRxCtrl, RX_DROP_TOTAL_COUNT);
+
 		nicRxReturnRFB(prAdapter, prSwRfb);
 		return;
 	}
@@ -4299,7 +4296,10 @@ uint8_t getPrimaryWlanIdx(struct ADAPTER *prAdapter,
 		uint8_t ucTid, uint8_t ucWlanIdx)
 {
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
-	return mldGetPrimaryWlanIdx(prAdapter, ucWlanIdx);
+	if (likely(ucTid & 0x1) == 0)
+		return ucWlanIdx;
+	else
+		return mldGetPrimaryWlanIdx(prAdapter, ucWlanIdx);
 #else
 	return ucWlanIdx;
 #endif

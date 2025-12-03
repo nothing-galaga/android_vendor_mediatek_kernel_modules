@@ -33,7 +33,7 @@
 #include "gl_p2p_os.h"
 #include "wlan_lib.h"
 #include "gl_cmd_validate.h"
-#include "rlm_domain.h"
+
 /*******************************************************************************
  *                              C O N S T A N T S
  *******************************************************************************
@@ -1367,20 +1367,32 @@ int wlanParseAkmSuites(uint32_t *au4AkmSuites, uint32_t u4AkmSuitesCount,
 			default:
 				break;
 			}
-		} else if (u4WpaVersion == IW_AUTH_WPA_VERSION_WPA ||
-			u4WpaVersion == IW_AUTH_WPA_VERSION_WPA2) {
+		} else if (u4WpaVersion == IW_AUTH_WPA_VERSION_WPA) {
 			switch (au4AkmSuites[i]) {
 			case WLAN_AKM_SUITE_8021X:
-				if (u4WpaVersion == IW_AUTH_WPA_VERSION_WPA)
-					u4AkmSuite = WPA_AKM_SUITE_802_1X;
-				else
-					u4AkmSuite = RSN_AKM_SUITE_802_1X;
+				u4AkmSuite = WPA_AKM_SUITE_802_1X;
 				break;
 			case WLAN_AKM_SUITE_PSK:
-				if (u4WpaVersion == IW_AUTH_WPA_VERSION_WPA)
-					u4AkmSuite = WPA_AKM_SUITE_PSK;
-				else
-					u4AkmSuite = RSN_AKM_SUITE_PSK;
+				u4AkmSuite = WPA_AKM_SUITE_PSK;
+				break;
+			case WLAN_AKM_SUITE_8021X_SHA256:
+				u4AkmSuite = RSN_AKM_SUITE_802_1X_SHA256;
+				break;
+			case WLAN_AKM_SUITE_PSK_SHA256:
+				u4AkmSuite = RSN_AKM_SUITE_PSK_SHA256;
+				break;
+			default:
+				DBGLOG(REQ, WARN, "invalid Akm Suite (%08x)\n",
+				       au4AkmSuites[i]);
+				return -EINVAL;
+			}
+		} else if (u4WpaVersion == IW_AUTH_WPA_VERSION_WPA2) {
+			switch (au4AkmSuites[i]) {
+			case WLAN_AKM_SUITE_8021X:
+				u4AkmSuite = RSN_AKM_SUITE_802_1X;
+				break;
+			case WLAN_AKM_SUITE_PSK:
+				u4AkmSuite = RSN_AKM_SUITE_PSK;
 				break;
 #if CFG_SUPPORT_802_11R
 			case WLAN_AKM_SUITE_FT_8021X:
@@ -5679,148 +5691,6 @@ int testmode_force_mrc(struct wiphy *wiphy,
 	return testmode_force_stbc_mrc(prGlueInfo, ucBssIndex, 1, cmd, len);
 }
 
-int testmode_set_custom_tx_power_calling(struct wiphy *wiphy,
-	struct wireless_dev *wdev, char *pcCommand, int i4TotalLen)
-{
-	struct GLUE_INFO *prGlueInfo = NULL;
-	struct PARAM_TX_PWR_CTRL_IOCTL rPwrCtrlParam = {0};
-	char *pcContCur = NULL, *pcContTemp = NULL, *pcEnd = NULL;
-	int32_t i4Argc = 0, rStatus = 0, i4Ret = 0, i4BytesWritten = -1;
-	int32_t i4Value = 0, u4SetInfoLen = 0;
-	int8_t *apcArgv[WLAN_CFG_ARGV_MAX] = {0};
-	int8_t i = 0, icPwrSetting[SET_CUSTOM_TX_POWER_CALLING_PARA_NUM] = {0};
-	int8_t aucSetting[256] = {0};
-	uint8_t fgApplied = 0;
-
-	WIPHY_PRIV(wiphy, prGlueInfo);
-	if (prGlueInfo == NULL)
-		return -EINVAL;
-
-	/*
-	 * Command format: Core0_ANT1_{2.4G, 5G, 6G}, Core0_ANT2_{2.4G, 5G, 6G},
-	 *                 Core1_ANT1_{2.4G, 5G, 6G}, Core1_ANT2_{2.4G, 5G, 6G}
-	 * Since the dynamic txpower command is only set by band, we will only
-	 * consider Core0_ANT1_{2.4G, 5G, 6G} and Core0_ANT2_{2.4G, 5G, 6G}
-	 * for power setting, and ignore others.
-	 */
-	DBGLOG(REQ, INFO, "command is %s\n", pcCommand);
-
-	pcContCur = pcCommand;
-	pcEnd = pcCommand + i4TotalLen;
-
-	pcContTemp = txPwrGetString(&pcContCur, "{");
-	if (!pcContCur || pcContCur > pcEnd) {
-		DBGLOG(REQ, ERROR,
-			"No content after '{',%s:%s\n",
-			pcContCur,
-			pcContTemp);
-		return -EINVAL;
-	}
-
-	/* verify there is } symbol */
-	pcContTemp = txPwrGetString(&pcContCur, "}");
-	if ((!pcContTemp) || (!pcContCur) || (pcContCur > pcEnd)) {
-		DBGLOG(REQ, ERROR,
-			"Can not find content after '}',%s:%s\n",
-			pcContCur,
-			pcContTemp);
-		return -EINVAL;
-	}
-
-	rStatus = wlanCfgParseArgument(pcContTemp, &i4Argc, apcArgv);
-
-	if ((rStatus != WLAN_STATUS_SUCCESS) ||
-		(i4Argc != SET_CUSTOM_TX_POWER_CALLING_PARA_NUM)) {
-		DBGLOG(REQ, ERROR,
-			"Parse argument fail, rStatus=%d, i4Argc=%d\n",
-			rStatus, i4Argc);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < SET_CUSTOM_TX_POWER_CALLING_PARA_NUM; i++) {
-		i4Ret = kalkStrtos32(apcArgv[i], 0, &i4Value);
-		if (i4Ret) {
-			DBGLOG(REQ, ERROR,
-				"Parse apcArgv[%d]:%s to i4Value error[%d]\n",
-				i, apcArgv[i], i4Ret);
-			return -EINVAL;
-		}
-
-		if (i4Value == SET_CUSTOM_TX_POWER_CALLING_DISABLE) {
-			icPwrSetting[i] = MAX_TX_POWER;
-		} else {
-			i4Value = i4Value * 2; /* Swith to LSB = 0.5dBm  */
-			if (i4Value < MIN_TX_POWER) {
-				/* Sanity check min boundary */
-				i4Value = MIN_TX_POWER;
-			} else if (i4Value > MAX_TX_POWER) {
-				/* Sanity check man boundary */
-				i4Value = MAX_TX_POWER;
-			}
-
-			icPwrSetting[i] = (int8_t)i4Value;
-		}
-	}
-
-	/* Only consider Core0_ANT1_{2.4G, 5G, 6G} and Core0_ANT2_{2.4G, 5G, 6G}
-	 * for power setting, and ignore others.
-	 */
-	i4BytesWritten = sprintf(aucSetting,
-			"[ALL,Legacy,,,,,,,,,]<CHAIN_ABS,2,3,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d>\0",
-			icPwrSetting[0],  /* 2.4G WF0 */
-			icPwrSetting[1],  /* 5G Band1 WF0 */
-			icPwrSetting[1],  /* 5G Band2 WF0 */
-			icPwrSetting[1],  /* 5G Band3 WF0 */
-			icPwrSetting[1],  /* 5G Band4 WF0 */
-			icPwrSetting[2],  /* 6G Band1 WF0 */
-			icPwrSetting[2],  /* 6G Band2 WF0 */
-			icPwrSetting[2],  /* 6G Band3 WF0 */
-			icPwrSetting[2],  /* 6G Band4 WF0 */
-			icPwrSetting[3],  /* 2.4G WF1 */
-			icPwrSetting[4],  /* 5G Band0 WF1 */
-			icPwrSetting[4],  /* 5G Band1 WF1 */
-			icPwrSetting[4],  /* 5G Band2 WF1 */
-			icPwrSetting[4],  /* 5G Band3 WF1 */
-			icPwrSetting[5],  /* 6G Band1 WF1 */
-			icPwrSetting[5],  /* 6G Band2 WF1 */
-			icPwrSetting[5],  /* 6G Band3 WF1 */
-			icPwrSetting[5]); /* 6G Band4 WF1 */
-
-	if (i4BytesWritten <= 0) {
-		DBGLOG(REQ, ERROR,
-			"Write setting fail[%d]\n",
-			i4BytesWritten);
-		return WLAN_STATUS_INVALID_DATA;
-	}
-
-	for (i = 0; i < SET_CUSTOM_TX_POWER_CALLING_PARA_NUM; i++) {
-		if (icPwrSetting[i] != MAX_TX_POWER) {
-			fgApplied = 1;
-			break;
-		}
-	}
-
-	kalMemZero(&rPwrCtrlParam, sizeof(struct PARAM_TX_PWR_CTRL_IOCTL));
-	rPwrCtrlParam.fgApplied = fgApplied;
-	rPwrCtrlParam.name = "_SAR_Limit";
-	rPwrCtrlParam.index = 1;
-	rPwrCtrlParam.newSetting = aucSetting;
-
-	DBGLOG(REQ, INFO, "applied=[%d], name=[%s], index=[%u], setting=[%s]\n",
-		rPwrCtrlParam.fgApplied,
-		rPwrCtrlParam.name,
-		rPwrCtrlParam.index,
-		rPwrCtrlParam.newSetting);
-
-	rStatus = kalIoctl(prGlueInfo,
-		wlanoidTxPowerControl,
-		(void *)&rPwrCtrlParam,
-		sizeof(struct PARAM_TX_PWR_CTRL_IOCTL),
-		&u4SetInfoLen);
-
-	return rStatus;
-}
-
 int32_t mtk_cfg80211_process_str_cmd_reply(
 	struct wiphy *wiphy, char *data, int len)
 {
@@ -6748,9 +6618,6 @@ int mtk_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	/* make sure netdev is disconnected */
 	DBGLOG(REQ, INFO, "ucBssIndex = %d\n", ucBssIndex);
 	if (!kalIsResetting()) {
-		/* Clear pending request (AIS). */
-		aisFsmFlushRequest(prAdapter, ucBssIndex);
-
 		rStatus = kalIoctlByBssIdx(prGlueInfo, wlanoidSetDisassociate,
 				&u4DisconnectReason, sizeof(u4DisconnectReason),
 				&u4SetInfoLen, ucBssIndex);

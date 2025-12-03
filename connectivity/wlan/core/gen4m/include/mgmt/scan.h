@@ -869,7 +869,6 @@ struct MLD_AP_INFO {
 struct BSS_DESC_SET {
 	struct BSS_DESC *prMainBssDesc;
 	uint8_t ucLinkNum; /* must smaller than MLD_LINK_MAX */
-	uint8_t ucRfBandBmap;
 	uint8_t fgIsMatchBssid;
 	uint8_t fgIsMatchBssidHint;
 	uint8_t fgIsAllLinkInBlackList;
@@ -1170,6 +1169,7 @@ void scanResetBssDesc(struct ADAPTER *prAdapter,
 		      struct BSS_DESC *prBssDesc);
 
 /* Check if VHT IE filled in Epigram IE */
+void scanCheckEpigramVhtIE(uint8_t *pucBuf, struct BSS_DESC *prBssDesc);
 void scanParseVHTCapIE(uint8_t *pucIE, struct BSS_DESC *prBssDesc);
 void scanParseVHTOpIE(uint8_t *pucIE, struct BSS_DESC *prBssDesc);
 

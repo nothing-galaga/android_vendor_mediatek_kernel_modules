@@ -4163,13 +4163,6 @@ struct CMD_LP_DBG_CTRL {
 	uint8_t aucReserved[3];
 };
 
-#if (CFG_HW_DETECT_REPORT == 1)
-struct EVENT_HW_DETECT_REPORT {
-	bool fgIsReportNode;
-	uint8_t aucReserved[3];
-	uint8_t aucStrBuffer[HW_DETECT_REPORT_STR_MAX_LEN];
-};
-#endif
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************
@@ -4687,10 +4680,6 @@ void nicCmdEventGetSlpCntInfo(struct ADAPTER *prAdapter,
 void nicCmdEventLpKeepPwrCtrl(struct ADAPTER *prAdapter,
 	struct CMD_INFO *prCmdInfo, uint8_t *pucEventBuf);
 
-#if (CFG_HW_DETECT_REPORT == 1)
-void nicEventHwDetectReport(struct ADAPTER *prAdapter,
-		struct WIFI_EVENT *prEvent);
-#endif
 /*******************************************************************************
  *                              F U N C T I O N S
  *******************************************************************************

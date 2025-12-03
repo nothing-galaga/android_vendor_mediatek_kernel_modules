@@ -1585,9 +1585,7 @@ struct TX_PWR_CTRL_ELEMENT *txPwrCtrlFindElement(
 				enum ENUM_TX_POWER_CTRL_LIST_TYPE eListType);
 void txPwrCtrlAddElement(struct ADAPTER *prAdapter,
 				struct TX_PWR_CTRL_ELEMENT *prElement);
-char *txPwrGetString(char **pcContent, char *delim);
-uint32_t txPwrParseNumber(char **pcContent, char *delim,
-				uint8_t *op, int8_t *value);
+
 #if CFG_SUPPORT_DYNAMIC_PWR_LIMIT_ANT_TAG
 int32_t txPwrParseTagMimo1T(
 	char *pStart, char *pEnd, uint8_t cTagParaNum,

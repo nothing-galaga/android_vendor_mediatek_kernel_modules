@@ -33,9 +33,6 @@
 #include <linux/soc/mediatek/devapc_public.h>
 #endif
 
-#if IS_ENABLED(CFG_MTK_WIFI_CONNV3_SUPPORT)
-#include "connv3.h"
-#endif
 /*******************************************************************************
 *                              C O N S T A N T S
 ********************************************************************************
@@ -2597,28 +2594,11 @@ int connsys_power_on(void)
 	struct mt66xx_chip_info *chip = NULL;
 #endif
 	int ret = 0;
-#if IS_ENABLED(CFG_MTK_WIFI_CONNV3_SUPPORT)
-	int retry = 0;
 
-	while (retry <= 25) {
-		ret = connv3_pwr_on(CONNV3_DRV_TYPE_WIFI);
-		if (ret == CONNV3_ERR_RST_ONGOING) {
-			DBGLOG(INIT, WARN,
-				"Wi-Fi on during L0 reset.\n");
-			kalMsleep(200);
-			retry++;
-			continue;
-		} else if (ret == 0) {
-			break;
-		}
-		DBGLOG(HAL, ERROR,
-			"connv3_pwr_on failed, ret=%d\n",
-			ret);
-		return ret;
-	}
-	if (retry > 25) {
-		DBGLOG(INIT, ERROR,
-			"Retry connv3_pwr_on timeout, ret=%d\n",
+#if IS_ENABLED(CFG_MTK_WIFI_CONNV3_SUPPORT)
+	ret = connv3_pwr_on(CONNV3_DRV_TYPE_WIFI);
+	if (ret) {
+		DBGLOG(HAL, ERROR, "connv3_pwr_on failed, ret=%d\n",
 			ret);
 		return ret;
 	}

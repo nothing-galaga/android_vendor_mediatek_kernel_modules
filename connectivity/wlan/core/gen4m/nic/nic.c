@@ -1274,14 +1274,27 @@ nicMediaStateChange(struct ADAPTER *prAdapter,
 				aisGetCurrBssId(prAdapter, ucBssIndex);
 			uint8_t ucAuthorized = FALSE;
 
-			if (EQUAL_SSID(prCurrBssid->rSsid.aucSsid,
+			/* DISCONNECT_REASON_CODE_ROAMING is triggered by
+			 * supplicant, must indicate the connection status,
+			 */
+			if (prAisFsmInfo->ucReasonOfDisconnect ==
+			    DISCONNECT_REASON_CODE_ROAMING &&
+			    EQUAL_SSID(prCurrBssid->rSsid.aucSsid,
 			    prCurrBssid->rSsid.u4SsidLen,
 			    prConnectionStatus->aucSsid,
 			    prConnectionStatus->ucSsidLen) &&
 			    EQUAL_MAC_ADDR(prCurrBssid->arMacAddress,
 			    prConnectionStatus->aucBssid)) {
-				ucAuthorized = TRUE;
-				DBGLOG(TX, INFO, "pre-authorized\n");
+				struct BSS_DESC *prBssDesc;
+
+				prBssDesc = scanSearchBssDescByBssidAndSsid(
+					prAdapter, prCurrBssid->arMacAddress,
+					TRUE, &prCurrBssid->rSsid);
+				if (prBssDesc && prBssDesc->fgIsConnected) {
+					ucAuthorized = TRUE;
+					DBGLOG(TX, INFO,
+						"pre-authorized\n");
+				}
 			}
 
 			prAdapter->rWlanInfo.u4SysTime = kalGetTimeTick();
@@ -3012,9 +3025,6 @@ uint32_t nicPmIndicateBssAbort(struct ADAPTER *prAdapter,
 	ASSERT(ucBssIndex <= prAdapter->ucHwBssIdNum);
 
 	rCmdIndicatePmBssAbort.ucBssIndex = ucBssIndex;
-
-	DBGLOG(INIT, INFO, "Bss%d aborted\n",
-		rCmdIndicatePmBssAbort.ucBssIndex);
 
 	return wlanSendSetQueryCmd(prAdapter,
 				   CMD_ID_INDICATE_PM_BSS_ABORT,

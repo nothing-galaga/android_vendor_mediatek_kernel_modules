@@ -350,8 +350,9 @@ void mldBssUpdateBandIdxBitmap(struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo);
 
 void mldBssUpdateCap(struct ADAPTER *prAdapter,
-	struct MLD_BSS_INFO *prMldBssInfo,
-	void *pvParam);
+	struct MLD_BSS_INFO *prMldBssInfo);
+
+void mldBssUpdateCapAll(struct ADAPTER *prAdapter);
 
 int8_t mldBssRegister(struct ADAPTER *prAdapter,
 	struct MLD_BSS_INFO *prMldBssInfo,
@@ -379,10 +380,9 @@ int8_t mldBssInit(struct ADAPTER *prAdapter);
 
 void mldBssUninit(struct ADAPTER *prAdapter);
 
-struct MLD_STA_RECORD *mldBssGetPeekClient(struct ADAPTER *prAdapter,
-	struct MLD_BSS_INFO *prMldBssInfo);
-
 void mldStarecDump(struct ADAPTER *prAdapter);
+
+uint8_t mldStarecExternalMldExist(struct ADAPTER *prAdapter);
 
 void mldBssTeardownAllClients(struct ADAPTER *prAdapter,
 	struct MLD_BSS_INFO *prMldBssInfo);
@@ -404,7 +404,7 @@ struct MLD_STA_RECORD *mldStarecAlloc(struct ADAPTER *prAdapter,
 	uint16_t u2EmlCap, uint16_t u2MldCap);
 
 void mldStarecFree(struct ADAPTER *prAdapter,
-	struct MLD_STA_RECORD *prMldStarec, struct STA_RECORD *prStarec);
+	struct MLD_STA_RECORD *prMldStarec);
 
 struct MLD_STA_RECORD *mldStarecGetByStarec(struct ADAPTER *prAdapter,
 	struct STA_RECORD *prStaRec);

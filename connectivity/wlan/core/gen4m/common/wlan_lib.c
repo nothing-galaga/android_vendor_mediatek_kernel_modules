@@ -7279,6 +7279,7 @@ void wlanInitFeatureOptionImpl(struct ADAPTER *prAdapter, uint8_t *pucKey)
 		"ApMldEML", FEATURE_DISABLED);
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
+	mldBssUpdateCapAll(prAdapter);
 #if (CFG_SUPPORT_802_11BE_EPCS == 1)
 	INIT_UINT(prWifiVar->fgEnEpcs, "EnableEpcs", FEATURE_ENABLED);
 #endif
@@ -7747,8 +7748,6 @@ void wlanInitFeatureOptionImpl(struct ADAPTER *prAdapter, uint8_t *pucKey)
 
 	INIT_UINT(prWifiVar->ucCsaDeauthClient,
 		"CsaDeauthClient", FEATURE_ENABLED);
-	INIT_UINT(prWifiVar->ucCsaDoneTimeout,
-		"CsaDoneTimeout", 10);
 
 #if (CFG_EFUSE_BUFFER_MODE_DELAY_CAL == 1)
 	INIT_UINT(prWifiVar->ucEfuseBufferModeCal, "EfuseBufferModeCal", 0);
@@ -8259,10 +8258,8 @@ void wlanInitFeatureOptionImpl(struct ADAPTER *prAdapter, uint8_t *pucKey)
 	INIT_UINT(prWifiVar->u4InactiveTimeout,
 		"InactiveTimeout", ROAMING_INACTIVE_TIMEOUT_SEC);
 	INIT_UINT(prWifiVar->u4BtmDelta, "BtmDelta", ROAMING_BTM_DELTA);
-	INIT_UINT(prWifiVar->u4BtmDisThreshold,
+	INIT_UINT(prWifiVar->u4BtmDisTimerThreshold,
 		 "BtmDisTimerThreshold", AIS_BTM_DIS_IMMI_TIMEOUT);
-	INIT_UINT(prWifiVar->u4BtmTimerThreshold,
-		 "BtmTimerThreshold", AIS_BTM_TIMER_THRESHOLD);
 #endif
 
 #if ARP_MONITER_ENABLE
@@ -8569,12 +8566,12 @@ void wlanInitFeatureOptionImpl(struct ADAPTER *prAdapter, uint8_t *pucKey)
 	prWifiVar->fgDynamicIcs = (uint8_t) wlanCfgGetUint32(
 		prAdapter, "DynamicIcsEn", FEATURE_ENABLED);
 #endif
+#if (CFG_HW_DETECT_REPORT == 1)
+	prWifiVar->fgHwDetectReportEn = (bool) wlanCfgGetUint32(
+		prAdapter, "HwDetectReportEnable", FEATURE_ENABLED);
+#endif /* CFG_HW_DETECT_REPORT  */
 
 #endif /* CFG_SUPPORT_DYNAMIC_PAGE_POOL */
-#if (CFG_HW_DETECT_REPORT == 1)
-	INIT_UINT(prWifiVar->fgHwDetectReportEn,
-		"HwDetectReportEnable", FEATURE_ENABLED);
-#endif /* CFG_HW_DETECT_REPORT  */
 #if (CFG_SUPPORT_TX_PWR_ENV == 1)
 	INIT_INT(prWifiVar->icTxPwrEnvLmtMin, "TxPwrEnvLmtMin",
 		TX_PWR_ENV_LMT_MIN);
@@ -8612,10 +8609,6 @@ void wlanInitFeatureOptionImpl(struct ADAPTER *prAdapter, uint8_t *pucKey)
 		  "TputFactorDumpPeriodL2", 10000);
 	INIT_UINT(prWifiVar->u4TputFactorDumpThresh,
 		  "TputFactorDumpThresh", 100);
-#endif
-#if (CFG_SUPPORT_WIFI_6G_PWR_MODE == 1)
-	INIT_UINT(prWifiVar->fgSpPwrLmtBackoff,
-		  "SpPwrLmtBackoff", FEATURE_ENABLED);
 #endif
 }
 
@@ -9620,8 +9613,7 @@ uint32_t wlanCfgParseToFW(int8_t **args, int8_t *args_size,
  * @return none
  */
 /*----------------------------------------------------------------------------*/
-void wlanFeatureToFw(struct ADAPTER *prAdapter, uint32_t u4Flag,
-	uint8_t *pucKey)
+void wlanFeatureToFw(struct ADAPTER *prAdapter, uint32_t u4Flag)
 {
 
 	struct WLAN_CFG_ENTRY *prWlanCfgEntry;
@@ -9649,15 +9641,6 @@ void wlanFeatureToFw(struct ADAPTER *prAdapter, uint32_t u4Flag,
 		prWlanCfgEntry = wlanCfgGetEntryByIndex(prAdapter, i, u4Flag);
 
 		if (prWlanCfgEntry) {
-
-			if (pucKey != NULL) {
-				if (kalStrnCmp(pucKey, prWlanCfgEntry->aucKey,
-					MAX_CMD_NAME_MAX_LENGTH) != 0)
-					continue;
-
-				if (ucTimes != 0)
-					break;
-			}
 
 			rCmd_v1.itemType = ITEM_TYPE_STR;
 

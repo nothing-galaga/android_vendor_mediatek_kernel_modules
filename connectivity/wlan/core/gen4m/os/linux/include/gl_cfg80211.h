@@ -186,8 +186,7 @@ enum ENUM_TESTMODE_STA_STATISTICS_ATTR {
  *                                 M A C R O S
  *******************************************************************************
  */
-#define SET_CUSTOM_TX_POWER_CALLING_PARA_NUM 12
-#define SET_CUSTOM_TX_POWER_CALLING_DISABLE -1
+
 /*******************************************************************************
  *                  F U N C T I O N   D E C L A R A T I O N S
  *******************************************************************************
@@ -817,8 +816,7 @@ int testmode_force_stbc(struct wiphy *wiphy,
 	struct wireless_dev *wdev, char *pcCommand, int i4TotalLen);
 int testmode_force_mrc(struct wiphy *wiphy,
 	struct wireless_dev *wdev, char *pcCommand, int i4TotalLen);
-int testmode_set_custom_tx_power_calling(struct wiphy *wiphy,
-	struct wireless_dev *wdev, char *pcCommand, int i4TotalLen);
+
 /*******************************************************************************
  *                              F U N C T I O N S
  *******************************************************************************

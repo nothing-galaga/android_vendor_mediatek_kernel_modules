@@ -32,9 +32,7 @@
 #include "gl_ics.h"
 #endif
 
-#if (CFG_HW_DETECT_REPORT == 1)
-#include "conn_dbg.h"
-#endif
+
 /*******************************************************************************
  *                              C O N S T A N T S
  *******************************************************************************
@@ -4742,14 +4740,6 @@ bool nicBeaconTimeoutFilterPolicy(struct ADAPTER *prAdapter,
 #endif
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1) && defined(CFG_SUPPORT_UNIFIED_COMMAND)
-	if (ucBcnTimeoutReason == UNI_ENUM_BCN_PROT_ERROR) {
-		DBGLOG(ML, INFO, "BTO reason for BP error=%d",
-			ucBcnTimeoutReason);
-		return TRUE;
-	}
-#endif
-
-#if (CFG_SUPPORT_802_11BE_MLO == 1) && defined(CFG_SUPPORT_UNIFIED_COMMAND)
 	if (ucBcnTimeoutReason != UNI_ENUM_BCN_MLINK_NULL_FRAME_THRESHOLD) {
 		DBGLOG(ML, INFO, "Only single link BTO reason=%d",
 			ucBcnTimeoutReason);
@@ -7200,36 +7190,3 @@ void nicCmdEventLpKeepPwrCtrl(struct ADAPTER *prAdapter,
 			       u4QueryInfoLen, WLAN_STATUS_SUCCESS);
 	}
 }
-#if (CFG_HW_DETECT_REPORT == 1)
-void nicEventHwDetectReport(struct ADAPTER *prAdapter,
-		struct WIFI_EVENT *prEvent)
-{
-	struct EVENT_HW_DETECT_REPORT *prEventHwDetectReport;
-	uint8_t str_buf[HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN];
-
-	if (!prAdapter->rWifiVar.fgHwDetectReportEn)
-		return;
-
-	prEventHwDetectReport =
-		(struct EVENT_HW_DETECT_REPORT *)(prEvent->aucBuffer);
-
-	if (snprintf(str_buf, HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN,
-		"[wlan]%s\n", prEventHwDetectReport->aucStrBuffer) < 0) {
-		DBGLOG(NIC, ERROR,
-			"HW Detect Report: %s copy failure\n", str_buf);
-		return;
-	}
-
-	DBGLOG(NIC, INFO, "HW Detect Report: %s\n", str_buf);
-
-	if (prEventHwDetectReport->fgIsReportNode) {
-		/* Report to conninfra node */
-		conn_dbg_add_log(CONN_DBG_LOG_TYPE_HW_ERR, str_buf);
-	}
-
-	if (prAdapter->rWifiVar.fgHwDetectReportEn == 2) {
-		/* Trigger kernel warning */
-		kalSendAeeWarning("WLAN", "HW Detect Report: %s\n", str_buf);
-	}
-}
-#endif

@@ -1622,9 +1622,6 @@ void p2pFuncStopComplete(struct ADAPTER *prAdapter,
 			kalP2pNotifyDisconnComplete(prAdapter,
 				prP2pBssInfo->u4PrivateData);
 
-		if (IS_BSS_APGO(prP2pBssInfo))
-			prP2pBssInfo->fgIsApGoStarted = FALSE;
-
 		/* Reset current OPMode */
 		prP2pBssInfo->eCurrentOPMode = OP_MODE_INFRASTRUCTURE;
 		prP2pBssInfo->fgBcDefaultKeyExist = FALSE;
@@ -1936,18 +1933,7 @@ SKIP_START_RDD:
 		}
 #endif
 
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-		/* Wait for fw's setup done event and continue to
-		 * notify carrier_on & start all tx queues to
-		 * userspace
-		 */
-		cnmTimerStartTimer(prAdapter,
-				   &(prBssInfo->rP2pApGoCarrierOnTimer),
-				   AP_GO_DELAY_CARRIER_ON_TIMEOUT_MS);
-#else
-		prBssInfo->fgIsApGoStarted = TRUE;
 		kalP2PTxCarrierOn(prAdapter->prGlueInfo, prBssInfo);
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
 
 #if (CFG_SUPPORT_DFS_MASTER == 1)
 		if (prP2pChnlReqInfo->eBand == BAND_5G &&
@@ -2227,7 +2213,7 @@ p2pFuncSwitchOPMode(struct ADAPTER *prAdapter,
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
 			mldBssUpdateCap(prAdapter,
-				mldBssGetByBss(prAdapter, prP2pBssInfo), NULL);
+				mldBssGetByBss(prAdapter, prP2pBssInfo));
 #endif
 
 			/* Update BSS INFO to FW. */
@@ -8066,48 +8052,6 @@ exit:
 	/* return; */
 }
 
-void p2pFuncNotifySapStarted(struct ADAPTER *prAdapter,
-	uint8_t ucBssIdx)
-{
-#if CFG_HOTSPOT_SUPPORT_ADJUST_SCC
-	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
-	struct BSS_INFO *prBssInfo;
-	struct GL_P2P_INFO *prP2PInfo;
-	struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo;
-	struct P2P_CHNL_REQ_INFO *prP2pChnlReqInfo;
-	uint8_t ucRoleIdx;
-	u_int8_t fgIsSap = FALSE;
-
-	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIdx);
-	if (!prBssInfo) {
-		DBGLOG(P2P, ERROR, "Null bss by idx(%u)\n",
-			ucBssIdx);
-		return;
-	}
-
-	ucRoleIdx = (uint8_t)prBssInfo->u4PrivateData;
-	prP2PInfo = prAdapter->prGlueInfo->prP2PInfo[ucRoleIdx];
-	prP2pRoleFsmInfo = P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
-		ucRoleIdx);
-	prP2pChnlReqInfo = &(prP2pRoleFsmInfo->rChnlReqInfo);
-	fgIsSap = p2pFuncIsAPMode(prWifiVar->prP2PConnSettings[ucRoleIdx]);
-
-	if (!fgIsSap)
-		return;
-
-	prP2PInfo->eChnlSwitchPolicy = CHNL_SWITCH_POLICY_NONE;
-	p2pFuncSwitchSapChannel(prAdapter);
-	if (prP2PInfo->eChnlSwitchPolicy != CHNL_SWITCH_POLICY_NONE) {
-		if (prP2pChnlReqInfo->fgIsChannelRequested)
-			p2pFuncReleaseCh(prAdapter, ucBssIdx,
-					 prP2pChnlReqInfo);
-
-		cnmTimerStopTimer(prAdapter,
-			&(prP2pRoleFsmInfo->rP2pRoleFsmTimeoutTimer));
-	}
-#endif
-}
-
 /*---------------------------------------------------------------------------*/
 /*!
  * \brief Get the pref freq list with maximum number assigned.
@@ -9039,7 +8983,6 @@ p2pFunNotifyChnlSwitch(struct ADAPTER *prAdapter,
 			}
 			/* wait for deauth TX done & switch channel */
 		} else {
-			DBGLOG(P2P, INFO, "notify csadone, policy:%d\n", ePolicy);
 			p2pFunChnlSwitchNotifyDone(prAdapter);
 		}
 		break;

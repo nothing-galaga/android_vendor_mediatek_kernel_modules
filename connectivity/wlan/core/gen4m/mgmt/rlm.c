@@ -2703,8 +2703,6 @@ void rlmParseMtkOui(struct ADAPTER *prAdapter, struct STA_RECORD *prStaRec,
 
 			sub = prPreWifi7->aucInfoElem;
 			sub_len = IE_LEN(prPreWifi7) - 2;
-			if (IE_LEN(prPreWifi7) <= 2)
-				return;
 
 			IE_FOR_EACH(sub, sub_len, sub_offset) {
 #if (CFG_SUPPORT_802_11BE == 1)
@@ -3089,6 +3087,7 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 
 			prCSAIE = (struct IE_CHANNEL_SWITCH *)pucIE;
 
+			prCSAParams->ucCsaNewCh = prCSAIE->ucNewChannelNum;
 			if (prBssInfo->ucPrimaryChannel ==
 					prCSAIE->ucNewChannelNum) {
 				DBGLOG(RLM, WARN,
@@ -3099,16 +3098,6 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 				break;
 			}
 
-#if CFG_SUPPORT_ROAMING
-			if (IS_BSS_AIS(prBssInfo) &&
-			    roamingFsmCheckIfRoaming(
-				    prAdapter, prBssInfo->ucBssIndex)) {
-				DBGLOG(RLM, INFO,
-					"Ignore csa beacon frame when roaming\n");
-				break;
-			}
-#endif
-
 			/* Mode 1 implies that addressed AP is advised to
 			 * transmit no further frames on current channel
 			 * until the scheduled channel switch.
@@ -3116,7 +3105,6 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 			DBGLOG(RLM, INFO, "[CSA] Count = %d Mode = %d\n",
 			       prCSAIE->ucChannelSwitchCount,
 			       prCSAIE->ucChannelSwitchMode);
-			prCSAParams->ucCsaNewCh = prCSAIE->ucNewChannelNum;
 			ucCurrentCsaCount = prCSAIE->ucChannelSwitchCount;
 
 			if (prCSAIE->ucChannelSwitchMode == 1) {
@@ -3167,6 +3155,7 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 
 			prExCSAIE = (struct IE_EX_CHANNEL_SWITCH *)pucIE;
 
+			prCSAParams->ucCsaNewCh = prExCSAIE->ucNewChannelNum;
 			if (prBssInfo->ucPrimaryChannel ==
 					prExCSAIE->ucNewChannelNum) {
 				DBGLOG(RLM, WARN,
@@ -3177,17 +3166,6 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 				break;
 			}
 
-#if CFG_SUPPORT_ROAMING
-			if (IS_BSS_AIS(prBssInfo) &&
-			    roamingFsmCheckIfRoaming(
-				    prAdapter, prBssInfo->ucBssIndex)) {
-				DBGLOG(RLM, INFO,
-					"Ignore csa beacon frame when roaming\n");
-				break;
-			}
-#endif
-
-			prCSAParams->ucCsaNewCh = prExCSAIE->ucNewChannelNum;
 			ucCurrentCsaCount = prExCSAIE->ucChannelSwitchCount;
 			rlmProcessExCsaIE(prAdapter, prStaRec,
 				prCSAParams,
@@ -3725,8 +3703,7 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 
 	/* Receive new beacon after channel switch */
 	if (!HAS_CH_SWITCH_PARAMS(prCSAParams) &&
-	    prCSAParams->ucCsaMode < MODE_NUM &&
-	    !IS_AIS_CH_SWITCH(prBssInfo)) {
+			prCSAParams->ucCsaMode < MODE_NUM) {
 #if (CFG_SUPPORT_WIFI_6G_PWR_MODE == 1)
 		struct BSS_DESC *prBssDesc = NULL;
 
@@ -3747,8 +3724,6 @@ static uint8_t rlmRecIeInfoForClient(struct ADAPTER *prAdapter,
 #endif
 
 		if (IS_BSS_AIS(prBssInfo)) {
-			cnmTimerStopTimer(prAdapter, &prBssInfo->rCsaDoneTimer);
-
 			aisUpdateParamsForCSA(prAdapter, prBssInfo);
 			rlmChangeOperationModeAfterCSA(prAdapter, prBssInfo);
 			if (prCSAParams->fgIsCrossBand)
@@ -6168,9 +6143,8 @@ uint32_t rlmFillHtCapIEByAdapter(struct ADAPTER *prAdapter,
 	 * the same purpose. The latter allows the STA to use only a
 	 * single receive chain immediately after association.
 	 */
-	if (prBssInfo->ucOpRxNss < supportNss)
-		prHtCap->u2HtCapInfo &=
-			~HT_CAP_INFO_SM_POWER_SAVE; /*Set as static power save*/
+	/* Set as non static power save for Tx 2Nss*/
+	prHtCap->u2HtCapInfo |= HT_CAP_INFO_SM_POWER_SAVE;
 
 	prHtCap->ucAmpduParam = AMPDU_PARAM_DEFAULT_VAL;
 
@@ -6617,20 +6591,6 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 		prCSAParams = &prBssInfo->CSAParams;
 		ucCurrentCsaCount = MAX_CSA_COUNT;
 
-		if (IS_BSS_AIS(prBssInfo)) {
-			if (aisFsmIsInProcessPostpone(prAdapter,
-				prBssInfo->ucBssIndex))
-				break;
-#if CFG_SUPPORT_ROAMING
-			if (roamingFsmCheckIfRoaming(prAdapter,
-				prBssInfo->ucBssIndex)) {
-				DBGLOG(RLM, INFO,
-					"Ignore csa action frame when roaming\n");
-				break;
-			}
-#endif
-		}
-
 		IE_FOR_EACH(pucIE, u2IELength, u2Offset)
 		{
 			switch (IE_ID(pucIE)) {
@@ -6667,6 +6627,8 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 				prChannelSwitchAnnounceIE =
 					(struct IE_CHANNEL_SWITCH *)pucIE;
 
+				prCSAParams->ucCsaNewCh =
+				    prChannelSwitchAnnounceIE->ucNewChannelNum;
 				if (prBssInfo->ucPrimaryChannel ==
 						prChannelSwitchAnnounceIE->
 						ucNewChannelNum) {
@@ -6705,8 +6667,6 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 					}
 				}
 
-				prCSAParams->ucCsaNewCh =
-				    prChannelSwitchAnnounceIE->ucNewChannelNum;
 				prCSAParams->ucCsaMode =
 					prChannelSwitchAnnounceIE->
 						ucChannelSwitchMode;
@@ -6808,20 +6768,6 @@ void rlmProcessPublicActionExCsa(struct ADAPTER *prAdapter,
 	if (!prBssInfo)
 		return;
 
-	if (IS_BSS_AIS(prBssInfo)) {
-		if (aisFsmIsInProcessPostpone(prAdapter,
-			prBssInfo->ucBssIndex))
-			return;
-#if CFG_SUPPORT_ROAMING
-		if (roamingFsmCheckIfRoaming(prAdapter,
-			prBssInfo->ucBssIndex)) {
-			DBGLOG(RLM, INFO,
-				"Ignore csa action frame when roaming\n");
-			return;
-		}
-#endif
-	}
-
 	prCSAParams = &prBssInfo->CSAParams;
 	u2IELength = prSwRfb->u2PacketLen -
 		(uint16_t)OFFSET_OF(struct ACTION_EX_CHANNEL_SWITCH_FRAME,
@@ -6830,19 +6776,19 @@ void rlmProcessPublicActionExCsa(struct ADAPTER *prAdapter,
 		(struct ACTION_EX_CHANNEL_SWITCH_FRAME *)prSwRfb->pvHeader;
 	pucIE = prEcsaActionFrame->aucInfoElem;
 
-	if (prBssInfo->ucPrimaryChannel == prEcsaActionFrame->ucNewChannelNum) {
+	prCSAParams->ucCsaNewCh = prEcsaActionFrame->ucNewChannelNum;
+	if (prBssInfo->ucPrimaryChannel == prEcsaActionFrame->ucNewChannelNum)
 		DBGLOG(RLM, WARN,
 			"[ECSA Public] BSS: " MACSTR " already at channel %u\n",
 			MAC2STR(prBssInfo->aucBSSID),
 			prEcsaActionFrame->ucNewChannelNum);
-		return;
-	}
-	rlmProcessExCsaIE(prAdapter, prStaRec,
-		prCSAParams,
-		prEcsaActionFrame->ucChannelSwitchMode,
-		prEcsaActionFrame->ucNewOperatingClass,
-		prEcsaActionFrame->ucNewChannelNum,
-		prEcsaActionFrame->ucChannelSwitchCount);
+	else
+		rlmProcessExCsaIE(prAdapter, prStaRec,
+			prCSAParams,
+			prEcsaActionFrame->ucChannelSwitchMode,
+			prEcsaActionFrame->ucNewOperatingClass,
+			prEcsaActionFrame->ucNewChannelNum,
+			prEcsaActionFrame->ucChannelSwitchCount);
 
 	IE_FOR_EACH(pucIE, u2IELength, u2Offset)
 	{
@@ -6867,7 +6813,6 @@ void rlmProcessPublicActionExCsa(struct ADAPTER *prAdapter,
 		}
 	}
 
-	prCSAParams->ucCsaNewCh = prEcsaActionFrame->ucNewChannelNum;
 	ucCurrentCsaCount = prEcsaActionFrame->ucChannelSwitchCount;
 
 	if (SHOULD_CH_SWITCH(ucCurrentCsaCount, prCSAParams)) {
@@ -6933,16 +6878,13 @@ void rlmCsaTimeout(struct ADAPTER *prAdapter,
 		return;
 	}
 
+	kalMemZero(&rSsid, sizeof(rSsid));
 	prCSAParams = &prBssInfo->CSAParams;
 	if (prBssInfo->ucPrimaryChannel == prCSAParams->ucCsaNewCh) {
 		DBGLOG(RLM, WARN,
 			"BSS: " MACSTR " already at channel %u\n",
 			MAC2STR(prBssInfo->aucBSSID), prCSAParams->ucCsaNewCh);
 		if (prCSAParams->fgHasStopTx) {
-			kalIndicateAllQueueTxAllowed(
-				prAdapter->prGlueInfo,
-				prStaRec->ucBssIndex,
-				TRUE);
 			qmSetStaRecTxAllowed(prAdapter, prStaRec, TRUE);
 			DBGLOG(RLM, EVENT, "[CSA] TxAllowed = TRUE\n");
 		}
@@ -6987,7 +6929,6 @@ void rlmCsaTimeout(struct ADAPTER *prAdapter,
 	if (HAS_SCO_PARAMS(prCSAParams))
 		prBssInfo->eBssSCO = prCSAParams->eSco;
 
-	kalMemZero(&rSsid, sizeof(rSsid));
 	COPY_SSID(rSsid.aucSsid, rSsid.u4SsidLen,
 		  prBssInfo->aucSSID, prBssInfo->ucSSIDLen);
 	prBssDesc = scanSearchBssDescByBssidAndSsid(
@@ -7056,25 +6997,6 @@ void rlmCsaTimeout(struct ADAPTER *prAdapter,
 	rlmSyncOperationParams(prAdapter, prBssInfo);
 	rlmResetCSAParams(prBssInfo, FALSE);
 }
-
-void rlmCsaDoneTimeout(struct ADAPTER *prAdapter,
-				   uintptr_t ulParamPtr)
-{
-	uint8_t ucBssIndex = (uint8_t) ulParamPtr;
-	struct BSS_INFO *prBssInfo;
-
-	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
-	if (!prBssInfo) {
-		DBGLOG(AIS, INFO, "No prBssInfo\n");
-		return;
-	}
-
-	DBGLOG(RLM, WARN, "[CSA] AP isn't switch to new channel!\n");
-
-	prBssInfo->u2DeauthReason = REASON_CODE_BEACON_TIMEOUT * 100;
-	aisBssBeaconTimeout(prAdapter, prBssInfo->ucBssIndex);
-}
-
 #endif /* CFG_SUPPORT_DFS */
 
 /*----------------------------------------------------------------------------*/
@@ -11027,16 +10949,11 @@ uint32_t rlmTxPwrEnvMaxTxPwrCalcByPsd(
 
 	/* 2. Convert TxPower limit PSD to BW Power limit
 	 *    - Max TxPwr(dBm) = PSD(dBm/Hz) + 10*log(BW)
-	 *    We will also convert power LSB = 0.5dBm
 	 */
 	if (u4Status == WLAN_STATUS_SUCCESS) {
 		for (eBwType = TX_PWR_ENV_MAX_TXPWR_BW20;
 			eBwType < TX_PWR_ENV_MAX_TXPWR_BW_NUM; eBwType++) {
 			rlmTxPwrEnvGetPwrDelta(eBwType, &ucTxPwrDelta);
-
-			/* Note the icMaxTxPwrPsd is LSB = 0.5dBm and
-			 * ucTxPwrDelta is already convert to LSB = 0.5dBm
-			 */
 			picMaxTxPwr[eBwType] = icMaxTxPwrPsd + ucTxPwrDelta;
 		}
 	}
@@ -11220,15 +11137,9 @@ uint32_t rlmTxPwrEnv6GPwrModeHdler(
 	enum TX_PWR_ENV_MAX_TXPWR_BW_TYPE eBw;
 
 	if (e6GPwrMode == PWR_MODE_6G_SP) {
+
 		if (prAdapter->rWifiVar.u2CountryCode != COUNTRY_CODE_US) {
 			/* So far only FCC need handle TPE limit for SP AP */
-			return WLAN_STATUS_SUCCESS;
-		}
-
-		if (prAdapter->rWifiVar.fgSpPwrLmtBackoff != FEATURE_ENABLED) {
-			/* When AP handle 6dbm backoff, client no need to
-			 * base on TPE power limit - 6dBm
-			 */
 			return WLAN_STATUS_SUCCESS;
 		}
 

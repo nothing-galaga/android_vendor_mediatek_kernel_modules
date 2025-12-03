@@ -239,6 +239,7 @@ const uint16_t mpduLen[CW_320_2MHZ + 1] = {
 
 #define PERCENTAGE(_val, _base) (_val * 100 / _base)
 
+#if (CFG_MLO_LINK_PLAN_MODE == 0)
 const uint8_t aucLinkPlan[] = {
 	BIT(BAND_2G4),
 	BIT(BAND_5G)
@@ -246,9 +247,10 @@ const uint8_t aucLinkPlan[] = {
 	 | BIT(BAND_6G)
 #endif
 };
+#endif
 
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-const uint8_t aucLinkPlanCert[] = {
+#if (CFG_MLO_LINK_PLAN_MODE == 1)
+const uint8_t aucLinkPlan[] = {
 	BIT(BAND_2G4),
 	BIT(BAND_5G),
 #if (CFG_SUPPORT_WIFI_6G == 1)
@@ -366,32 +368,20 @@ uint8_t apsBssDescToLink(struct ADAPTER *ad,
 	struct AP_COLLECTION *ap, struct BSS_DESC *bss, uint8_t bidx)
 {
 	uint8_t i = 0, j = 0;
-	uint8_t ucArraySize = 0;
-	const uint8_t *tmpLinkPlan;
 
 	for (i = 0; i < ap->ucLinkNum; i++) {
 		if (ap->aucMask[i] & BIT(bss->eBand))
 			return i;
 	}
 
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-	if (ad->rWifiVar.u4SwTestMode == ENUM_SW_TEST_MODE_SIGMA_BE) {
-		tmpLinkPlan = aucLinkPlanCert;
-		ucArraySize = ARRAY_SIZE(aucLinkPlanCert);
-	} else
-#endif
-	{
-		tmpLinkPlan = aucLinkPlan;
-		ucArraySize = ARRAY_SIZE(aucLinkPlan);
-	}
-
 	if (i == ap->ucLinkNum && i < MAX_LINK_PLAN_NUM) {
-		for (j = 0; j < ucArraySize; j++) {
-			if (tmpLinkPlan[j] & BIT(bss->eBand))
+		for (j = 0; j < ARRAY_SIZE(aucLinkPlan); j++) {
+			if (aucLinkPlan[j] & BIT(bss->eBand))
 				break;
 		}
-		if (j < ucArraySize) {
-			ap->aucMask[i] = tmpLinkPlan[j];
+
+		if (j < ARRAY_SIZE(aucLinkPlan)) {
+			ap->aucMask[i] = aucLinkPlan[j];
 			ap->ucLinkNum++;
 			return i;
 		}
@@ -2267,7 +2257,6 @@ struct BSS_DESC *apsFillBssDescSet(struct ADAPTER *ad,
 			continue;
 
 		set->aprBssDesc[set->ucLinkNum++] = ap->aprTarget[i];
-		set->ucRfBandBmap |= BIT(ap->aprTarget[i]->eBand);
 	}
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)

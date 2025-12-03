@@ -89,22 +89,11 @@
 	aisGetAisFsmInfo(_adapter, _bss_idx)->ucIsStaRoaming)
 #endif
 
-#define IS_AIS_CH_SWITCH(_bss_info) \
-	(IS_BSS_AIS(_bss_info) && \
-	(_bss_info->fgIsAisCsaPending || _bss_info->fgIsAisSwitchingChnl))
-
-#if (CFG_TC10_FEATURE == 1)
-#define RCPI_FOR_DONT_ROAM                  80 /*-70dbm*/
-#else
-#define RCPI_FOR_DONT_ROAM                  60 /*-80dbm*/
-#endif
-
 #define AIS_BTM_DIS_IMMI_TIMEOUT	    10000 /* MSEC */
 #define AIS_BTM_DIS_IMMI_STATE_0	    0
 #define AIS_BTM_DIS_IMMI_STATE_1	    1
 #define AIS_BTM_DIS_IMMI_STATE_2	    2
 #define AIS_BTM_DIS_IMMI_STATE_3	    3
-#define AIS_BTM_TIMER_THRESHOLD		    10000 /* MSEC */
 
 #define AIS_FT_R0		0
 #define AIS_FT_R1		1
@@ -160,7 +149,6 @@ enum ENUM_AIS_REQUEST_TYPE {
 	AIS_REQUEST_ROAMING_CONNECT,
 	AIS_REQUEST_REMAIN_ON_CHANNEL,
 	AIS_REQUEST_BTO,
-	AIS_REQUEST_CSA,
 	AIS_REQUEST_NUM
 };
 
@@ -172,11 +160,6 @@ struct AIS_REQ_HDR {
 struct AIS_SCAN_REQ {
 	struct AIS_REQ_HDR rReqHdr;
 	struct PARAM_SCAN_REQUEST_ADV rScanRequest;
-};
-
-struct AIS_CSA_REQ {
-	struct AIS_REQ_HDR rReqHdr;
-	uint8_t ucBssIndex;
 };
 
 struct AIS_REQ_CHNL_INFO {
@@ -279,7 +262,6 @@ struct AIS_SPECIFIC_BSS_INFO {
 	/* end Support AP Selection */
 
 	struct BSS_TRANSITION_MGT_PARAM rBTMParam;
-	struct TIMER rBTMDisassocTimer;
 	struct LINK_MGMT  rNeighborApList;
 	OS_SYSTIME rNeiApRcvTime;
 	uint32_t u4NeiApValidInterval;
@@ -967,18 +949,14 @@ void aisFunFlushTxQueue(struct ADAPTER *prAdapter,
 	struct STA_RECORD *prStaRec);
 void aisFunSwitchChannel(struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo);
-void aisFunSwitchChannelImpl(struct ADAPTER *prAdapter,
-	uint8_t ucBssIndex);
-void aisFunSwitchChannelAbort(struct ADAPTER *ad,
-	struct AIS_FSM_INFO *ais, uint8_t fgResetAll);
+void aisFunSwitchChannelAbort(struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo);
 void aisUpdateParamsForCSA(struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo);
 void aisReqJoinChPrivilegeForCSA(struct ADAPTER *prAdapter,
 	struct AIS_FSM_INFO *prAisFsmInfo,
 	struct BSS_INFO *prBss,
 	uint8_t *ucChTokenId);
-u_int8_t aisFsmIsSwitchChannel(struct ADAPTER *ad,
-	struct AIS_FSM_INFO *ais);
 
 /*******************************************************************************
  *                              F U N C T I O N S
@@ -1058,12 +1036,6 @@ void aisDeactivateAllLink(struct ADAPTER *prAdapter,
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
 uint8_t aisSecondLinkAvailable(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
-
-struct MLD_BSS_INFO *aisGetMldBssInfo(
-	struct ADAPTER *prAdapter, uint8_t ucBssIndex);
-
-struct MLD_STA_RECORD *aisGetMldStaRec(
-	struct ADAPTER *prAdapter, uint8_t ucBssIndex);
 #endif
 
 void aisTargetBssSetConnected(struct ADAPTER *prAdapter,
@@ -1083,10 +1055,6 @@ struct TIMER *aisGetSecModeChangeTimer(
 	struct ADAPTER *prAdapter,
 	uint8_t ucBssIndex);
 #endif
-
-struct TIMER *aisGetBTMDisassocTimer(
-	struct ADAPTER *prAdapter,
-	uint8_t ucBssIndex);
 
 struct TIMER *aisGetScanDoneTimer(
 	struct ADAPTER *prAdapter,

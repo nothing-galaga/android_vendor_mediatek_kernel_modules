@@ -1774,8 +1774,6 @@ u_int8_t halProcessToken(struct ADAPTER *prAdapter,
 	struct HIF_MEM_OPS *prMemOps;
 	struct RTMP_DMACB *prTxCell;
 	struct RTMP_TX_RING *prTxRing;
-	uint32_t u4CpuIdx;
-	uint16_t u2Port;
 
 	prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
 	prMemOps = &prHifInfo->rMemOps;
@@ -1818,11 +1816,9 @@ u_int8_t halProcessToken(struct ADAPTER *prAdapter,
 				     prTokenEntry->u4DmaLength);
 	}
 
-	u2Port = prTokenEntry->u2Port;
-	u4CpuIdx = prTokenEntry->u4CpuIdx;
-	if (u2Port < NUM_OF_TX_RING && u4CpuIdx < TX_RING_DATA_SIZE) {
-		prTxRing = &prHifInfo->TxRing[u2Port];
-		prTxCell = &prTxRing->Cell[u4CpuIdx];
+	if (prTokenEntry->u4CpuIdx < TX_RING_DATA_SIZE) {
+		prTxRing = &prHifInfo->TxRing[prTokenEntry->u2Port];
+		prTxCell = &prTxRing->Cell[prTokenEntry->u4CpuIdx];
 		prTxCell->prToken = NULL;
 	}
 	prTokenEntry->u4CpuIdx = TX_RING_DATA_SIZE;

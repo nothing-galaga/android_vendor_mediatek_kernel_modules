@@ -293,13 +293,6 @@ uint8_t p2pRoleFsmInit(struct ADAPTER *prAdapter,
 		p2pFuncRadarInfoInit();
 #endif
 
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-		cnmTimerInitTimer(prAdapter,
-				&(prP2pBssInfo->rP2pApGoCarrierOnTimer),
-				p2pRoleFsmCarrierOnTimeoutHandler,
-				(uintptr_t)prP2pBssInfo);
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
-
 		LINK_INITIALIZE(&prP2pBssInfo->rPmkidCache);
 
 #if (CFG_SUPPORT_802_11BE_MLO == 1)
@@ -407,11 +400,6 @@ void p2pRoleFsmUninit(struct ADAPTER *prAdapter, uint8_t ucRoleIdx)
 		/* ensure the timer be stopped */
 		cnmTimerStopTimer(prAdapter,
 			&(prP2pRoleFsmInfo->rP2pRoleFsmTimeoutTimer));
-
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-		cnmTimerStopTimer(prAdapter,
-				&(prP2pBssInfo->rP2pApGoCarrierOnTimer));
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
 
 		cnmTimerStopTimer(prAdapter,
 			&(prP2pRoleFsmInfo->rP2pCsaDoneTimer));
@@ -878,8 +866,6 @@ p2pRoleFsmDeauthCompleteImpl(struct ADAPTER *prAdapter,
 		}
 		if (prP2PInfo && prP2PInfo->eChnlSwitchPolicy ==
 				CHNL_SWITCH_POLICY_DEAUTH) {
-			DBGLOG(P2P, INFO, "notify csadone, policy:%d\n",
-					prP2PInfo->eChnlSwitchPolicy);
 			prP2PInfo->eChnlSwitchPolicy = CHNL_SWITCH_POLICY_NONE;
 			p2pFunChnlSwitchNotifyDone(prAdapter);
 		}
@@ -2512,7 +2498,6 @@ void p2pCsaControlFlow(struct ADAPTER *prAdapter,
 		&rDbdcDecisionInfo);
 #endif /*CFG_SUPPORT_DBDC*/
 }
-
 void p2pRoleFsmRunEventCsaDone(struct ADAPTER *prAdapter,
 		struct MSG_HDR *prMsgHdr)
 {
@@ -2527,52 +2512,21 @@ void p2pRoleFsmRunEventCsaDone(struct ADAPTER *prAdapter,
 	struct STA_RECORD *prCurrStaRec;
 	struct LINK *prClientList;
 
-	DBGLOG(P2P, INFO,, "p2pRoleFsmRunEventCsaDone\n");
-
-	if (!prAdapter) {
-		DBGLOG(P2P, INFO, "prAdapter is null !\n");
-		return;
-	}
+	DBGLOG(P2P, TRACE, "p2pRoleFsmRunEventCsaDone\n");
 
 	prMsgP2pCsaDoneMsg = (struct MSG_P2P_CSA_DONE *) prMsgHdr;
 
-	if (!prMsgP2pCsaDoneMsg) {
-		DBGLOG(P2P, INFO, "prMsgP2pCsaDoneMsg is null !\n");
-		return;
-	}
-
 	prP2pBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 		prMsgP2pCsaDoneMsg->ucBssIndex);
-
-	if (!prP2pBssInfo) {
-		DBGLOG(P2P, INFO, "prP2pBssInfo is null !\n");
-		return;
-	}
-
 	prAisBssInfo = aisGetConnectedBssInfo(prAdapter);
 
 	prP2pRoleFsmInfo =
 		P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
 			prP2pBssInfo->u4PrivateData);
-
-	if (!prP2pRoleFsmInfo) {
-		DBGLOG(P2P, INFO, "prP2pRoleFsmInfo is null !\n");
-		return;
-	}
-
 	prP2PInfo = prAdapter->prGlueInfo->prP2PInfo[
 			prP2pRoleFsmInfo->ucRoleIndex];
-
-	if (!prP2PInfo) {
-		DBGLOG(P2P, INFO, "prP2PInfo is null !\n");
-		return;
-	}
-
 	prChnlReqInfo = &prP2pRoleFsmInfo->rChnlReqInfo;
 	prClientList = &prP2pBssInfo->rStaRecOfClientList;
-
-	DBGLOG(P2P, INFO, "bss index: %d, policy: %d\n",
-		prMsgP2pCsaDoneMsg->ucBssIndex, prP2PInfo->eChnlSwitchPolicy);
 
 	if (prP2PInfo)
 		prP2PInfo->eChnlSwitchPolicy = CHNL_SWITCH_POLICY_NONE;
@@ -2595,23 +2549,9 @@ void p2pRoleFsmRunEventCsaDone(struct ADAPTER *prAdapter,
 				prChnlReqInfo);
 	}
 
-	if (p2pFuncIsAPMode(prAdapter->rWifiVar
-			.prP2PConnSettings[prP2pBssInfo->u4PrivateData])) {
-			DBGLOG(P2P, INFO, "cnmSapIsActive %d\n", cnmSapIsActive(prAdapter));
-			if (IS_NET_PWR_STATE_IDLE(prAdapter,
-				prP2pBssInfo->ucBssIndex)){
-				DBGLOG(P2P, INFO,"SAP is not active\n");
-			}
-
-			if (cnmSapIsActive(prAdapter))
-					p2pRoleFsmStateTransition(prAdapter,
-					prP2pRoleFsmInfo,
-					P2P_ROLE_STATE_SWITCH_CHANNEL);
-	} else {
-				p2pRoleFsmStateTransition(prAdapter,
-					prP2pRoleFsmInfo,
-					P2P_ROLE_STATE_SWITCH_CHANNEL);
-			}
+	p2pRoleFsmStateTransition(prAdapter,
+		prP2pRoleFsmInfo,
+		P2P_ROLE_STATE_SWITCH_CHANNEL);
 
 	cnmTimerStopTimer(prAdapter, &prP2pRoleFsmInfo->rP2pCsaDoneTimer);
 
@@ -3178,6 +3118,12 @@ void p2pRoleFsmUpdateBssInfoForJOIN(struct ADAPTER *prAdapter,
 				"prAssocRspSwRfb or prAssocRspSwRfb->pvHeader is NULL!\n");
 		}
 
+		/* 4 <1.4> Activate current AP's STA_RECORD_T
+		 * in Driver.
+		 */
+		cnmStaRecChangeState(prAdapter,
+			prStaRec, STA_STATE_3);
+
 #if CFG_SUPPORT_TDLS_AUTO
 		/* fire the update jiffies */
 		prP2pLinkBssInfo->ulLastUpdate = kalGetJiffies();
@@ -3203,18 +3149,6 @@ void p2pRoleFsmUpdateBssInfoForJOIN(struct ADAPTER *prAdapter,
 			scanReportBss2Cfg80211(prAdapter,
 				BSS_TYPE_P2P_DEVICE,
 				prTargetBssDesc);
-	}
-
-	/* update starec */
-	for (i = 0; i < MLD_LINK_MAX; i++) {
-		struct STA_RECORD *prStaRec =
-			p2pGetLinkStaRec(prP2pRoleFsmInfo, i);
-
-		if (!prStaRec)
-			continue;
-
-		/* Activate current AP's STA_RECORD_T in Driver. */
-		cnmStaRecChangeState(prAdapter,	prStaRec, STA_STATE_3);
 	}
 }
 
@@ -5608,88 +5542,5 @@ static void p2pRoleFsmHandleBssUnlink(struct ADAPTER *prAdapter,
 		kalP2pUnlinkBss(prAdapter->prGlueInfo, bss_desc->aucBSSID);
 	}
 }
-
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-void p2pRoleFsmCarrierOnTimeoutHandler(struct ADAPTER *prAdapter,
-	uintptr_t ulParamPtr)
-{
-	struct BSS_INFO *prP2pBssInfo = (struct BSS_INFO *)ulParamPtr;
-	struct MSG_P2P_NOTIFY_APGO_STARTED *prNotifyMsg = NULL;
-
-	if (!prAdapter || !prP2pBssInfo)
-		return;
-
-	DBGLOG(P2P, INFO, "bss idx=%u\n", prP2pBssInfo->ucBssIndex);
-
-	prNotifyMsg = (struct MSG_P2P_NOTIFY_APGO_STARTED *)
-		cnmMemAlloc(prAdapter, RAM_TYPE_MSG,
-				sizeof(*prNotifyMsg));
-	if (!prNotifyMsg) {
-		DBGLOG(NIC, ERROR, "Alloc mem(%zu) failed\n",
-			sizeof(*prNotifyMsg));
-		return;
-	}
-
-	prNotifyMsg->rMsgHdr.eMsgId =
-		MID_MNY_P2P_NOTIFY_APGO_STARTED;
-	prNotifyMsg->ucBssIdx = prP2pBssInfo->ucBssIndex;
-	mboxSendMsg(prAdapter, MBOX_ID_0,
-		    (struct MSG_HDR *)prNotifyMsg,
-		    MSG_SEND_METHOD_UNBUF);
-}
-
-void p2pRoleFsmRunEventApGoStarted(struct ADAPTER *prAdapter,
-				   struct MSG_HDR *prMsgHdr)
-{
-	struct MSG_P2P_NOTIFY_APGO_STARTED *prNotifyMsg =
-		(struct MSG_P2P_NOTIFY_APGO_STARTED *)prMsgHdr;
-	struct WIFI_VAR *prWifiVar;
-	struct BSS_INFO *prP2pBssInfo;
-	uint8_t ucRoleIdx;
-	u_int8_t fgIsSap = FALSE;
-
-	if (!prAdapter || !prNotifyMsg) {
-		DBGLOG(P2P, ERROR, "prAdapter=0x%p prNotifyMsg=0x%p\n",
-			prAdapter, prNotifyMsg);
-		return;
-	}
-
-	prWifiVar = &prAdapter->rWifiVar;
-	prP2pBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prNotifyMsg->ucBssIdx);
-	if (!prP2pBssInfo) {
-		DBGLOG(P2P, ERROR, "Invalid bss idx=%u\n",
-			prNotifyMsg->ucBssIdx);
-		goto exit;
-	}
-	ucRoleIdx = (uint8_t)prP2pBssInfo->u4PrivateData;
-	fgIsSap = p2pFuncIsAPMode(prWifiVar->prP2PConnSettings[ucRoleIdx]);
-
-	if (!IS_NET_PWR_STATE_ACTIVE(prAdapter, prNotifyMsg->ucBssIdx)) {
-		DBGLOG(P2P, WARN, "bss(%u)'s power state NOT active\n",
-			prNotifyMsg->ucBssIdx);
-		goto exit;
-	}
-
-	DBGLOG(P2P, INFO, "bss idx=%u, started=%d\n",
-		prP2pBssInfo->ucBssIndex,
-		prP2pBssInfo->fgIsApGoStarted);
-
-	if (prP2pBssInfo->fgIsApGoStarted)
-		goto exit;
-
-	if (timerPendingTimer(&(prP2pBssInfo->rP2pApGoCarrierOnTimer)))
-		cnmTimerStopTimer(prAdapter,
-				  &(prP2pBssInfo->rP2pApGoCarrierOnTimer));
-
-	prP2pBssInfo->fgIsApGoStarted = TRUE;
-	kalP2PTxCarrierOn(prAdapter->prGlueInfo, prP2pBssInfo);
-
-	if (fgIsSap)
-		p2pFuncNotifySapStarted(prAdapter, prP2pBssInfo->ucBssIndex);
-
-exit:
-	cnmMemFree(prAdapter, prMsgHdr);
-}
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
 
 #endif /* CFG_ENABLE_WIFI_DIRECT */

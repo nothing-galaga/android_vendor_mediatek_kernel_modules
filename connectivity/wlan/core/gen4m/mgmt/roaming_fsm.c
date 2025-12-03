@@ -1349,6 +1349,7 @@ void roamingFsmRunEventNewCandidate(struct ADAPTER *prAdapter,
 uint32_t roamingFsmProcessEvent(struct ADAPTER *prAdapter,
 	struct CMD_ROAMING_TRANSIT *prTransit)
 {
+	struct ROAMING_INFO *prRoamingFsmInfo;
 	uint8_t ucBssIndex = prTransit->ucBssidx;
 
 	if (ucBssIndex >= MAX_BSSID_NUM) {
@@ -1361,6 +1362,8 @@ uint32_t roamingFsmProcessEvent(struct ADAPTER *prAdapter,
 	       "[%d] ROAMING Process Events: Current Time = %u\n",
 	       ucBssIndex,
 	       kalGetTimeTick());
+
+	prRoamingFsmInfo = aisGetRoamingInfo(prAdapter, ucBssIndex);
 
 	if (prTransit->u2Event == ROAMING_EVENT_DISCOVERY) {
 		struct CMD_ROAMING_TRANSIT rTransit = {0};
@@ -1411,7 +1414,6 @@ uint32_t roamingFsmProcessEvent(struct ADAPTER *prAdapter,
 
 uint8_t roamingFsmInDecision(struct ADAPTER *prAdapter, uint8_t ucBssIndex)
 {
-	struct AIS_FSM_INFO *ais;
 	struct ROAMING_INFO *roam;
 	enum ENUM_PARAM_CONNECTION_POLICY policy;
 	struct CONNECTION_SETTINGS *setting;
@@ -1422,13 +1424,12 @@ uint8_t roamingFsmInDecision(struct ADAPTER *prAdapter, uint8_t ucBssIndex)
 #endif
 	roam = aisGetRoamingInfo(prAdapter, ucBssIndex);
 	setting = aisGetConnSettings(prAdapter, ucBssIndex);
-	ais = aisGetAisFsmInfo(prAdapter, ucBssIndex);
 	policy = setting->eConnectionPolicy;
 
 	return IS_BSS_INDEX_AIS(prAdapter, ucBssIndex) &&
 	       roam->eCurrentState == ROAMING_STATE_DECISION &&
 #if CFG_SUPPORT_DFS
-	       !aisFsmIsSwitchChannel(prAdapter, ais) &&
+	       !timerPendingTimer(&prBssInfo->rCsaTimer) &&
 #endif
 	       !prAdapter->rWifiVar.fgDisRoaming &&
 	       policy != CONNECT_BY_BSSID ?
@@ -1471,29 +1472,4 @@ u_int8_t roamingFsmCheckIfRoaming(struct ADAPTER *prAdapter,
 	return FALSE;
 }
 
-void roamingFsmBTMTimeout(struct ADAPTER *prAdapter,
-				uintptr_t ulParamPtr)
-{
-	uint8_t ucBssIndex = (uint8_t) ulParamPtr;
-	struct CMD_ROAMING_TRANSIT rRoamingData = {0};
-	struct AIS_FSM_INFO *prAisFsmInfo =
-		aisGetAisFsmInfo(prAdapter, ucBssIndex);
-	struct BSS_TRANSITION_MGT_PARAM *prBtmParam =
-		aisGetBTMParam(prAdapter, ucBssIndex);
-	struct BSS_DESC *prBssDesc =
-		scanSearchBssDescByBssid(prAdapter, prBtmParam->aucBSSID);
-
-	if (prBssDesc &&
-	    prBssDesc->fgIsConnected & aisGetBssIndexBmap(prAisFsmInfo)) {
-		DBGLOG(ROAMING, INFO, "[%d] BTM DiassocTimer Timeout\n",
-				      ucBssIndex);
-
-		rRoamingData.eReason = ROAMING_REASON_BTM;
-		rRoamingData.u2Data = prBssDesc->ucRCPI;
-		rRoamingData.ucBssidx = ucBssIndex;
-		roamingFsmRunEventDiscovery(prAdapter, &rRoamingData);
-	} else {
-		DBGLOG(ROAMING, ERROR, "[%d] Invalid BssDesc\n", ucBssIndex);
-	}
-}
 #endif

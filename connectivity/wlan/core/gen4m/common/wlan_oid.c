@@ -7874,8 +7874,6 @@ wlanoidSetKeyCfg(struct ADAPTER *prAdapter,
 		 uint32_t *pu4SetInfoLen) {
 	uint32_t rWlanStatus = WLAN_STATUS_SUCCESS;
 	struct PARAM_CUSTOM_KEY_CFG_STRUCT *prKeyCfgInfo;
-	uint8_t *pucKey = NULL;
-	uint8_t aucKey[MAX_CMD_NAME_MAX_LENGTH] = {0};
 
 	DBGLOG(INIT, LOUD, "\n");
 
@@ -7898,15 +7896,13 @@ wlanoidSetKeyCfg(struct ADAPTER *prAdapter,
 	} else {
 		wlanCfgSet(prAdapter, prKeyCfgInfo->aucKey,
 			   prKeyCfgInfo->aucValue, prKeyCfgInfo->u4Flag);
-		kalStrnCpy(&aucKey[0], prKeyCfgInfo->aucKey,
-			MAX_CMD_NAME_MAX_LENGTH);
-		pucKey = &aucKey[0];
 		wlanInitFeatureOptionImpl(prAdapter, prKeyCfgInfo->aucKey);
 #if CFG_SUPPORT_IOT_AP_BLACKLIST
 		if (kalMemCmp(prKeyCfgInfo->aucKey, "IOTAP", 5) == 0)
 			wlanCfgLoadIotApRule(prAdapter);
 #endif
 	}
+
 
 	DBGLOG(REQ, TRACE,
 		"StaVHT [%u], ApVHT [%u], GoVHT [%u], GcVHT [%u]\n",
@@ -7926,7 +7922,7 @@ wlanoidSetKeyCfg(struct ADAPTER *prAdapter,
 		prAdapter->rWifiVar.ucTxStbc,
 		prAdapter->rWifiVar.ucRxStbc);
 #if CFG_SUPPORT_EASY_DEBUG
-	wlanFeatureToFw(prAdapter, prKeyCfgInfo->u4Flag, pucKey);
+	wlanFeatureToFw(prAdapter, prKeyCfgInfo->u4Flag);
 #endif
 
 	return rWlanStatus;
@@ -8150,7 +8146,7 @@ uint32_t
 wlanoidSetMulticastList(struct ADAPTER *prAdapter,
 			void *pvSetBuffer, uint32_t u4SetBufferLen,
 			uint32_t *pu4SetInfoLen) {
-#define DBG_BUFFER_SZ		512
+#define DBG_BUFFER_SZ		1024
 
 	struct PARAM_MULTICAST_LIST *prMcAddrList;
 	struct CMD_MAC_MCAST_ADDR rCmdMacMcastAddr;
@@ -8193,23 +8189,22 @@ wlanoidSetMulticastList(struct ADAPTER *prAdapter,
 
 	prDbgBuf = kalMemZAlloc(DBG_BUFFER_SZ, VIR_MEM_TYPE);
 	if (prDbgBuf) {
-		i4Written += kalSnprintf(prDbgBuf + i4Written,
-					 DBG_BUFFER_SZ - i4Written,
-					 "BssIdx %d allow list: total=%d",
-					 rCmdMacMcastAddr.ucBssIndex,
-					 rCmdMacMcastAddr.u4NumOfGroupAddr);
+		i4Written +=
+			kalScnprintf(prDbgBuf + i4Written,
+				     DBG_BUFFER_SZ - i4Written,
+				     "BssIdx %d allow list: total=%d",
+				     rCmdMacMcastAddr.ucBssIndex,
+				     rCmdMacMcastAddr.u4NumOfGroupAddr);
 		for (i = 0; i < rCmdMacMcastAddr.u4NumOfGroupAddr; i++) {
-			i4Written += kalSnprintf(prDbgBuf + i4Written,
-						 DBG_BUFFER_SZ - i4Written,
-						 "\nmac[%u]="MACSTR,
-						 i,
-						 MAC2STR(
-						 rCmdMacMcastAddr.
-						 arAddress[i]));
-			if (i4Written < 0 || i4Written >= DBG_BUFFER_SZ)
-				break;
+			i4Written +=
+				kalScnprintf(prDbgBuf + i4Written,
+					     DBG_BUFFER_SZ - i4Written,
+					     "\nmac[%u]="MACSTR,
+					     i, MAC2STR(
+					     rCmdMacMcastAddr.arAddress[i]));
 		}
-		DBGLOG(OID, INFO, "%s\n", prDbgBuf);
+		if (rCmdMacMcastAddr.u4NumOfGroupAddr > 0)
+			DBGLOG(OID, INFO, "%s\n", prDbgBuf);
 		kalMemFree(prDbgBuf, VIR_MEM_TYPE, DBG_BUFFER_SZ);
 	}
 
@@ -8907,6 +8902,10 @@ wlanoidSetDisassociate(struct ADAPTER *prAdapter,
 	if (prAisFsmInfo->eCurrentState == AIS_STATE_SCAN ||
 			prAisFsmInfo->eCurrentState == AIS_STATE_ONLINE_SCAN)
 		prAisFsmInfo->fgIsScanOidAborted = TRUE;
+	if (u4DisconnectReason == DISCONNECT_REASON_CODE_DEL_IFACE) {
+		/* Clear pending request (AIS). */
+		aisFsmFlushRequest(prAdapter, ucBssIndex);
+	}
 
 	prAisAbortMsg->fgDelayIndication = FALSE;
 	prAisAbortMsg->ucBssIndex = ucBssIndex;

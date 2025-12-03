@@ -1362,10 +1362,6 @@
 #define CFG_MLO_LINK_PLAN_MODE			 0
 #endif
 
-#ifndef CFG_SINGLE_BAND_MLSR_56
-#define CFG_SINGLE_BAND_MLSR_56                  0
-#endif
-
 #if (CFG_SUPPORT_802_11BE_MLO == 1) && (CFG_SUPPORT_802_11BE == 0)
 #error \
 "CFG_SUPPORT_802_11BE should be 1 once CFG_SUPPORT_802_11BE_MLO equals to 1"
@@ -2071,7 +2067,7 @@
  *       COUNTRY_CHANNEL_TXPOWER_LIMIT_TYPE_COMP_11AC_V2
  *------------------------------------------------------------------------------
  */
-#define CFG_SUPPORT_DYNA_TX_PWR_CTRL_11AC_V2_SETTING 1
+#define CFG_SUPPORT_DYNA_TX_PWR_CTRL_11AC_V2_SETTING 0
 
 /*------------------------------------------------------------------------------
  * Dynamic tx power control:
@@ -2253,11 +2249,13 @@
 #else
 #define DEFAULT_NSS (2)
 #endif
+
 #ifdef CFG_STA_2G_BW
 #define DEFAULT_STA_2G_BW (CFG_STA_2G_BW)
 #else
-#define DEFAULT_STA_2G_BW (MAX_BW_40MHZ)
+#define DEFAULT_STA_2G_BW (MAX_BW_20MHZ)
 #endif
+
 #ifdef CFG_STA_5G_BW
 #define DEFAULT_STA_5G_BW (CFG_STA_5G_BW)
 #else
@@ -2643,6 +2641,12 @@
 #define CFG_FAST_PATH_SUPPORT 0
 #endif
 
+#if (CFG_MTK_ANDROID_WMT == 1)
+#define CFG_WIFI_EHT_H2E_CHK		0
+#else
+#define CFG_WIFI_EHT_H2E_CHK		1
+#endif
+
 #if (CFG_SUPPORT_CONNAC3X == 1)
 #define CFG_SUPPORT_RTT 1
 #else
@@ -2656,16 +2660,6 @@
 #define CFG_WIFI_IGTK_GTK_SEPARATE	0
 #else
 #define CFG_WIFI_IGTK_GTK_SEPARATE	1
-#endif
-
-#ifndef CFG_REKEY_OFFLOAD
-#define CFG_REKEY_OFFLOAD	1
-#endif
-
-#if (CFG_MTK_ANDROID_WMT == 1)
-#define CFG_WIFI_EHT_H2E_CHK		0
-#else
-#define CFG_WIFI_EHT_H2E_CHK		1
 #endif
 
 /*------------------------------------------------------------------------------

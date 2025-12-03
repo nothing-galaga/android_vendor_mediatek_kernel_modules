@@ -455,9 +455,6 @@ void p2pFuncSwitchGcChannel(struct ADAPTER *prAdapter,
 
 void p2pFuncSwitchSapChannel(struct ADAPTER *prAdapter);
 
-void p2pFuncNotifySapStarted(struct ADAPTER *prAdapter,
-	uint8_t ucBssIdx);
-
 uint32_t p2pFunGetPreferredFreqList(struct ADAPTER *prAdapter,
 		enum ENUM_IFTYPE eIftype, uint32_t *freq_list,
 		uint32_t *num_freq_list);

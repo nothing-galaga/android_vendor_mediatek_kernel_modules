@@ -293,19 +293,23 @@ uint32_t p2pLinkProcessRxAssocReqFrame(
 	prMldBssInfo = mldBssGetByBss(prAdapter, prBssInfo);
 	prMldStarec = mldStarecGetByMldAddr(prAdapter,
 		prMldBssInfo, prMlInfo->aucMldAddr);
-	if (!prMldStarec) {
-		prMldStarec = mldStarecAlloc(prAdapter, prMldBssInfo,
-			prMlInfo->aucMldAddr, fgMldType,
-			prMlInfo->u2EmlCap, prMlInfo->u2MldCap);
-		if (!prMldStarec) {
-			DBGLOG(AAA, WARN, "Can't alloc mldstarec!\n");
-			return WLAN_STATUS_FAILURE;
-		}
-
-		mldStarecRegister(prAdapter, prMldStarec, prStaRec,
-					prBssInfo->ucLinkIndex);
-		mldStarecSetSetupIdx(prAdapter, prStaRec);
+	if (prMldStarec) {
+		DBGLOG(AAA, WARN, "MldStarec%d ucGroupMldId=%d already exist\n",
+			prMldStarec->ucIdx, prMldStarec->ucGroupMldId);
+		mldStarecFree(prAdapter, prMldStarec);
 	}
+
+	prMldStarec = mldStarecAlloc(prAdapter, prMldBssInfo,
+		prMlInfo->aucMldAddr, fgMldType,
+		prMlInfo->u2EmlCap, prMlInfo->u2MldCap);
+	if (!prMldStarec) {
+		DBGLOG(AAA, WARN, "Can't alloc mldstarec!\n");
+		return WLAN_STATUS_FAILURE;
+	}
+
+	mldStarecRegister(prAdapter, prMldStarec, prStaRec,
+				prBssInfo->ucLinkIndex);
+	mldStarecSetSetupIdx(prAdapter, prStaRec);
 
 	if (prMlInfo->ucProfNum == 0) {
 		DBGLOG(AAA, INFO, "ml ie ["MACSTR"] without links\n",

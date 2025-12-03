@@ -3232,11 +3232,10 @@ int mldDump(struct ADAPTER *prAdapter, uint8_t ucIndex,
 
 		i4BytesWritten += kalSnprintf(
 			pcCommand + i4BytesWritten, i4TotalLen - i4BytesWritten,
-			"PRI/SEC/SETUP/ACT_BMP/PEER_MLD:%d/%d/%d/%d/"MACSTR"\n",
+			"PRI/SEC/SETUP/PEER_MLD_ADDR:%d/%d/%d/"MACSTR"\n",
 			prMldStarec->u2PrimaryMldId,
 			prMldStarec->u2SecondMldId,
 			prMldStarec->u2SetupWlanId,
-			prMldStarec->u4ActiveStaBitmap,
 			MAC2STR(prMldStarec->aucPeerMldAddr));
 		i4BytesWritten += kalSnprintf(
 			pcCommand + i4BytesWritten, i4TotalLen - i4BytesWritten,
@@ -3281,6 +3280,17 @@ int mldDump(struct ADAPTER *prAdapter, uint8_t ucIndex,
 
 done:
 	return i4BytesWritten;
+}
+
+void mldBssInitializeClientList(struct ADAPTER *prAdapter,
+			     struct MLD_BSS_INFO *prMldBssInfo)
+{
+	struct LINK *prStaRecOfClientList;
+
+	prStaRecOfClientList = &prMldBssInfo->rMldStaRecOfClientList;
+
+	if (!LINK_IS_EMPTY(prStaRecOfClientList))
+		LINK_INITIALIZE(prStaRecOfClientList);
 }
 
 void mldBssAddClient(struct ADAPTER *prAdapter,
@@ -3351,20 +3361,6 @@ uint8_t mldBssRemoveClient(struct ADAPTER *prAdapter,
 	       MAC2STR(prMldStaRec->aucPeerMldAddr),
 	       prMldStaRec->ucIdx, prMldStaRec->ucGroupMldId);
 	return FALSE;
-}
-
-struct MLD_STA_RECORD *mldBssGetPeekClient(struct ADAPTER *prAdapter,
-	struct MLD_BSS_INFO *prMldBssInfo)
-{
-	struct LINK *prClientList;
-
-	if (!prMldBssInfo)
-		return NULL;
-
-	prClientList = &prMldBssInfo->rMldStaRecOfClientList;
-
-	return LINK_PEEK_HEAD(prClientList,
-				struct MLD_STA_RECORD, rLinkEntry);
 }
 
 void mldBssDump(struct ADAPTER *prAdapter)
@@ -3467,14 +3463,11 @@ void mldBssUpdateOmacIdx(
 		prMldBssInfo->ucOmacIdx = prMainBssInfo->ucOwnMacIndex;
 	}
 
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-	if (prMldBssInfo->fgIsSbMlsr)
-		return;
-#endif /* CFG_SINGLE_BAND_MLSR_56 */
-
+#if (CFG_SUPPORT_CONNAC3X == 1)
 	DBGLOG(ML, INFO, "Use mld omac idx %d instead\n",
 		prMldBssInfo->ucOmacIdx);
 	prBssInfo->ucOwnMacIndex = prMldBssInfo->ucOmacIdx;
+#endif
 }
 
 /**
@@ -3513,8 +3506,7 @@ void mldBssUpdateBandIdxBitmap(struct ADAPTER *prAdapter,
 }
 
 void mldBssUpdateCap(struct ADAPTER *prAdapter,
-	struct MLD_BSS_INFO *prMldBssInfo,
-	void *pvParam)
+	struct MLD_BSS_INFO *prMldBssInfo)
 {
 	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
 	struct BSS_INFO *prBssInfo = NULL;
@@ -3522,47 +3514,30 @@ void mldBssUpdateCap(struct ADAPTER *prAdapter,
 	if (!prMldBssInfo || !prMldBssInfo->fgIsInUse)
 		return;
 
-	prBssInfo = LINK_PEEK_HEAD(&(prMldBssInfo->rBssList),
-				struct BSS_INFO, rLinkEntryMld);
-	if (!prBssInfo)
-		goto done;
-
-	if (!IS_BSS_AIS(prBssInfo)) {
-		/* update max simu links num */
-		if (prMldBssInfo->rBssList.u4NumElem == 0)
-			prMldBssInfo->ucMaxSimuLinks = 0;
-		else
+	if (prWifiVar->ucMaxSimuLinks != 0xff)
+		prMldBssInfo->ucMaxSimuLinks = prWifiVar->ucMaxSimuLinks;
+	else if (prMldBssInfo->rBssList.u4NumElem == 0)
+		prMldBssInfo->ucMaxSimuLinks = 0;
+	else
 		prMldBssInfo->ucMaxSimuLinks =
 			prMldBssInfo->rBssList.u4NumElem - 1;
 
-		/* update eml cap */
-		prMldBssInfo->ucEmlEnabled = FALSE;
-		prMldBssInfo->u2EMLCap = 0;
-	} else {
-		struct BSS_DESC_SET *prBssDescSet =
-			(struct BSS_DESC_SET *)pvParam;
+	prBssInfo = LINK_PEEK_HEAD(&(prMldBssInfo->rBssList),
+				struct BSS_INFO, rLinkEntryMld);
+	if (!prBssInfo)
+		return;
 
-		if (!prBssDescSet)
-			goto done;
-
-		/* update max simu links num */
-		if (prBssDescSet->ucLinkNum == 0)
-			prMldBssInfo->ucMaxSimuLinks = 0;
-		else
-			prMldBssInfo->ucMaxSimuLinks =
-				prBssDescSet->ucLinkNum - 1;
-
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-		if (prBssDescSet->ucRfBandBmap ==
-			(BIT(BAND_5G) | BIT(BAND_6G))) {
-			prMldBssInfo->fgIsSbMlsr = TRUE;
-			prMldBssInfo->ucMaxSimuLinks = 0;
+	if (IS_BSS_APGO(prBssInfo)) {
+		if (IS_FEATURE_ENABLED(
+				prAdapter->rWifiVar.ucApMldEMLSupport)) {
+			prMldBssInfo->ucEmlEnabled = TRUE;
+			prMldBssInfo->u2EMLCap =
+				prAdapter->rWifiVar.u2ApMldEMLCap;
 		} else {
-			prMldBssInfo->fgIsSbMlsr = FALSE;
+			prMldBssInfo->ucEmlEnabled = FALSE;
+			prMldBssInfo->u2EMLCap = 0;
 		}
-#endif /* CFG_SINGLE_BAND_MLSR_56 */
-
-		/* update eml cap */
+	} else {
 		if (IS_FEATURE_ENABLED(
 				prAdapter->rWifiVar.ucNonApMldEMLSupport)) {
 			prMldBssInfo->ucEmlEnabled = TRUE;
@@ -3573,11 +3548,14 @@ void mldBssUpdateCap(struct ADAPTER *prAdapter,
 			prMldBssInfo->u2EMLCap = 0;
 		}
 	}
+}
 
-done:
-	/* set by config strictly */
-	if (prWifiVar->ucMaxSimuLinks != 0xff)
-		prMldBssInfo->ucMaxSimuLinks = prWifiVar->ucMaxSimuLinks;
+void mldBssUpdateCapAll(struct ADAPTER *prAdapter)
+{
+	uint8_t i = 0;
+
+	for (i = 0; i < ARRAY_SIZE(prAdapter->aprMldBssInfo); i++)
+		mldBssUpdateCap(prAdapter, &prAdapter->aprMldBssInfo[i]);
 }
 
 int8_t mldBssRegister(struct ADAPTER *prAdapter,
@@ -3586,8 +3564,7 @@ int8_t mldBssRegister(struct ADAPTER *prAdapter,
 {
 	struct LINK *prBssList = NULL;
 
-	if (!prMldBssInfo ||
-	    prMldBssInfo->ucGroupMldId == prBssInfo->ucGroupMldId)
+	if (!prMldBssInfo)
 		return -EINVAL;
 
 	prBssList = &prMldBssInfo->rBssList;
@@ -3604,8 +3581,8 @@ int8_t mldBssRegister(struct ADAPTER *prAdapter,
 	LINK_INSERT_TAIL(prBssList, &prBssInfo->rLinkEntryMld);
 
 	mldBssUpdateMldAddrByMainBss(prAdapter, prMldBssInfo);
-	mldBssUpdateCap(prAdapter, prMldBssInfo, NULL);
 	mldBssUpdateOmacIdx(prAdapter, prMldBssInfo, prBssInfo);
+	mldBssUpdateCap(prAdapter, prMldBssInfo);
 
 	return 0;
 }
@@ -3640,7 +3617,7 @@ void mldBssUnregister(struct ADAPTER *prAdapter,
 			&prCurrBssInfo->rLinkEntryMld);
 	}
 
-	mldBssUpdateCap(prAdapter, prMldBssInfo, NULL);
+	mldBssUpdateCap(prAdapter, prMldBssInfo);
 }
 
 struct MLD_BSS_INFO *mldBssAlloc(struct ADAPTER *prAdapter)
@@ -3653,13 +3630,18 @@ struct MLD_BSS_INFO *mldBssAlloc(struct ADAPTER *prAdapter)
 			continue;
 
 		prMldBssInfo = &prAdapter->aprMldBssInfo[i];
-		kalMemZero(prMldBssInfo, sizeof(*prMldBssInfo));
 		LINK_INITIALIZE(&prMldBssInfo->rBssList);
-		LINK_INITIALIZE(&prMldBssInfo->rMldStaRecOfClientList);
 		prMldBssInfo->fgIsInUse = TRUE;
 		prMldBssInfo->ucGroupMldId = i;
 		prMldBssInfo->ucOmRemapIdx = OM_REMAP_IDX_NONE;
 		prMldBssInfo->ucOmacIdx = INVALID_OMAC_IDX;
+		prMldBssInfo->ucBssBitmap = 0;
+		prMldBssInfo->ucHwBandBitmap = 0;
+		prMldBssInfo->ucMaxSimuLinks = 0;
+		prMldBssInfo->ucEmlEnabled = FALSE;
+		prMldBssInfo->u2EMLCap = 0;
+
+		mldBssInitializeClientList(prAdapter, prMldBssInfo);
 
 		DBGLOG(ML, INFO, "ucGroupMldId: %d, ucOmRemapIdx: %d\n",
 			prMldBssInfo->ucGroupMldId,
@@ -3681,7 +3663,7 @@ void mldBssFree(struct ADAPTER *prAdapter,
 
 	prBssList = &prMldBssInfo->rBssList;
 
-	DBGLOG(ML, INFO, "ucGroupMldId: %d\n",
+	DBGLOG(ML, TRACE, "ucGroupMldId: %d\n",
 		prMldBssInfo->ucGroupMldId);
 
 	LINK_FOR_EACH_ENTRY_SAFE(prCurrBssInfo, prNextBssInfo, prBssList,
@@ -4003,7 +3985,6 @@ int8_t mldStarecRegister(struct ADAPTER *prAdapter,
 	prStarecList = &prMldStarec->rStarecList;
 	LINK_INSERT_TAIL(prStarecList, &prStarec->rLinkEntryMld);
 	prMldStarec->u4StaBitmap |= BIT(prStarec->ucIndex);
-	prMldStarec->u4ActiveStaBitmap |= BIT(prStarec->ucIndex);
 	prMldStarec->u2ValidLinks |= BIT(ucLinkId);
 
 	mldStarecUpdateMldId(prAdapter, prMldStarec);
@@ -4061,11 +4042,10 @@ void mldStarecUnregister(struct ADAPTER *prAdapter,
 	mldStarecUpdateMldId(prAdapter, prMldStarec);
 
 	prMldStarec->u4StaBitmap &= ~BIT(prStarec->ucIndex);
-	prMldStarec->u4ActiveStaBitmap &= ~BIT(prStarec->ucIndex);
 	prMldStarec->u2ValidLinks &= ~BIT(prStarec->ucLinkIndex);
 
 	if (LINK_IS_EMPTY(prStarecList))
-		mldStarecFree(prAdapter, prMldStarec, prStarec);
+		mldStarecFree(prAdapter, prMldStarec);
 }
 
 struct MLD_STA_RECORD *mldStarecAlloc(struct ADAPTER *prAdapter,
@@ -4094,10 +4074,6 @@ struct MLD_STA_RECORD *mldStarecAlloc(struct ADAPTER *prAdapter,
 		prMldStarec->u2MldCap = u2MldCap;
 		COPY_MAC_ADDR(prMldStarec->aucPeerMldAddr, aucMacAddr);
 
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-		prMldStarec->fgIsSbMlsr = prMldBssInfo->fgIsSbMlsr;
-#endif /* CFG_SINGLE_BAND_MLSR_56 */
-
 #if (CFG_SUPPORT_802_11BE_EPCS == 1)
 		cnmTimerInitTimer(prAdapter,
 				&prMldStarec->rEpcsTimer,
@@ -4122,19 +4098,36 @@ struct MLD_STA_RECORD *mldStarecAlloc(struct ADAPTER *prAdapter,
 }
 
 void mldStarecFree(struct ADAPTER *prAdapter,
-	struct MLD_STA_RECORD *prMldStarec, struct STA_RECORD *prStarec)
+	struct MLD_STA_RECORD *prMldStarec)
 {
 	struct MLD_BSS_INFO *prMldBssInfo;
+	struct LINK *prStarecList;
 
 	DBGLOG(ML, INFO, "MldStarec=%d, ucGroupMldId=%d\n",
 		prMldStarec->ucIdx, prMldStarec->ucGroupMldId);
 
 	prMldBssInfo = mldBssGetByIdx(prAdapter, prMldStarec->ucGroupMldId);
+	prStarecList = &prMldStarec->rStarecList;
 
-#ifdef CFG_SUPPORT_UNIFIED_COMMAND
-	nicUniCmdMldStaTeardown(prAdapter, prStarec);
-#endif
+	if (!LINK_IS_EMPTY(prStarecList)) {
+		struct STA_RECORD *prCurrStarec, *prNextStarec;
 
+		DBGLOG(ML, WARN,
+			"MldStarec%d ucGroupMldId=%d not empty, clear all sta\n",
+			prMldStarec->ucIdx, prMldStarec->ucGroupMldId);
+
+		/* sync with FW */
+		nicUniCmdMldStaTeardown(prAdapter,
+			LINK_PEEK_HEAD(prStarecList,
+			struct STA_RECORD, rLinkEntryMld));
+
+		LINK_FOR_EACH_ENTRY_SAFE(prCurrStarec, prNextStarec,
+			prStarecList, rLinkEntryMld, struct STA_RECORD) {
+			prCurrStarec->ucMldStaIndex = MLD_GROUP_NONE;
+			LINK_REMOVE_KNOWN_ENTRY(prStarecList,
+				&prCurrStarec->rLinkEntryMld);
+		}
+	}
 #if (CFG_SUPPORT_802_11BE_T2LM == 1)
 	cnmTimerStopTimer(prAdapter, &prMldStarec->rT2LMTimer);
 #endif

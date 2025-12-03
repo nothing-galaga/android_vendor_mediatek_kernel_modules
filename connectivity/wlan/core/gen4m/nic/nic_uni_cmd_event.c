@@ -7466,6 +7466,66 @@ uint32_t nicUniCmdSendVnf(struct ADAPTER *ad,
 }
 #endif /* CFG_VOLT_INFO */
 
+#if (CFG_HW_DETECT_REPORT == 1)
+void nicUniEventHwDetectReport(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
+{
+#define HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN	(HW_DETECT_REPORT_STR_MAX_LEN+7)
+	int32_t tags_len;
+	uint8_t *tag;
+	uint16_t offset = 0;
+	uint32_t fixed_len = sizeof(struct UNI_EVENT_HW_DETECT_REPORT);
+	uint32_t data_len = GET_UNI_EVENT_DATA_LEN(evt);
+	uint8_t *data = GET_UNI_EVENT_DATA(evt);
+	uint32_t fail_cnt = 0;
+	uint8_t	str_buf[HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN];
+
+	if (!ad->rWifiVar.fgHwDetectReportEn)
+		return;
+
+	/* underflow check */
+	if (data_len < fixed_len) {
+		DBGLOG(NIC, ERROR, "Invalid event data length:%d\n",
+			data_len);
+		return;
+	}
+
+	tags_len = data_len - fixed_len;
+	tag = data + fixed_len;
+	TAG_FOR_EACH(tag, tags_len, offset) {
+		switch (TAG_ID(tag)) {
+		case UNI_EVENT_HW_DETECT_REPORT_BASIC: {
+			struct UNI_EVENT_HW_DETECT_REPORT_PARAM
+				*hw_detect_report =
+				(struct UNI_EVENT_HW_DETECT_REPORT_PARAM *)tag;
+
+			if (snprintf(str_buf,
+				HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN,
+				"[wlan]%s\n",
+				hw_detect_report->aucStrBuffer) < 0) {
+				DBGLOG(NIC, ERROR,
+			       "HW Detect Report: %s copy failure\n", str_buf);
+				return;
+			}
+
+			DBGLOG(NIC, INFO,
+				"HW Detect Report: %s\n", str_buf);
+			conn_dbg_add_log(CONN_DBG_LOG_TYPE_HW_ERR,
+				str_buf);
+
+			kalSendAeeWarning("WLAN", "HW Detect Report: %s\n",
+				str_buf);
+		}
+			break;
+		default:
+			fail_cnt++;
+			ASSERT(fail_cnt < MAX_UNI_EVENT_FAIL_TAG_COUNT)
+			DBGLOG(NIC, WARN, "invalid tag = %d\n", TAG_ID(tag));
+			break;
+		}
+	}
+}
+#endif /* CFG_HW_DETECT_REPORT */
+
 #if CFG_FAST_PATH_SUPPORT
 uint32_t nicUniCmdFastPath(struct ADAPTER *ad,
 		struct WIFI_UNI_SETQUERY_INFO *info)
@@ -9598,7 +9658,6 @@ void nicUniEventScanDone(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 	uint16_t data_len = GET_UNI_EVENT_DATA_LEN(evt);
 	uint8_t *data = GET_UNI_EVENT_DATA(evt);
 	uint8_t fail_cnt = 0;
-	u_int8_t fgIsValidScanDone = TRUE;
 	int i;
 	struct UNI_EVENT_SCAN_DONE *scan_done;
 	struct EVENT_SCAN_DONE legacy = {0};
@@ -9622,12 +9681,7 @@ void nicUniEventScanDone(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 		case UNI_EVENT_SCAN_DONE_TAG_BASIC: {
 			struct UNI_EVENT_SCAN_DONE_BASIC *basic =
 				(struct UNI_EVENT_SCAN_DONE_BASIC *) tag;
-			/* Event Type TAG_BASIC should have 12 bytes contents.*/
-			if (basic->u2Length !=
-				sizeof(struct UNI_EVENT_SCAN_DONE_BASIC)) {
-				fgIsValidScanDone = FALSE;
-				break;
-			}
+
 			legacy.ucCompleteChanCount = basic->ucCompleteChanCount;
 			legacy.ucCurrentState = basic->ucCurrentState;
 			legacy.ucScanDoneVersion = basic->ucScanDoneVersion;
@@ -9638,14 +9692,7 @@ void nicUniEventScanDone(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 		case UNI_EVENT_SCAN_DONE_TAG_SPARSECHNL: {
 			struct UNI_EVENT_SCAN_DONE_SPARSECHNL *sparse =
 				(struct UNI_EVENT_SCAN_DONE_SPARSECHNL *) tag;
-			/* Event Type TAG_SPARSECHNL should
-			 * have 8 bytes contents.
-			 */
-			if (sparse->u2Length !=
-				sizeof(struct UNI_EVENT_SCAN_DONE_SPARSECHNL)) {
-				fgIsValidScanDone = FALSE;
-				break;
-			}
+
 			legacy.ucSparseChannelValid =
 				sparse->ucSparseChannelValid;
 			legacy.rSparseChannel.ucBand = sparse->ucBand;
@@ -9686,12 +9733,7 @@ void nicUniEventScanDone(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 			struct UNI_EVENT_SCAN_DONE_NLO *nlo =
 				(struct UNI_EVENT_SCAN_DONE_NLO *) tag;
 			struct EVENT_SCHED_SCAN_DONE sched;
-			/* Event Type NLO should have 8 bytes contents. */
-			if (nlo->u2Length
-				!= sizeof(struct UNI_EVENT_SCAN_DONE_NLO)) {
-				fgIsValidScanDone = FALSE;
-				break;
-			}
+
 			sched.ucStatus = nlo->ucStatus;
 			sched.ucSeqNum = legacy.ucSeqNum;
 
@@ -9708,30 +9750,7 @@ void nicUniEventScanDone(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 		}
 	}
 
-	if (tags_len != offset)
-		DBGLOG(NIC, ERROR, "Tag(%d, %d)\n", TAG_ID(tag), TAG_LEN(tag));
-
-	/* Check whether FW Event State and
-	 * Complete Channel Number are correct.
-	 */
-	if (legacy.ucCurrentState != FW_SCAN_STATE_SCAN_DONE) {
-		DBGLOG(NIC, ERROR, "ucCurrentState(%d) is Invalid!\n",
-			legacy.ucCurrentState);
-		fgIsValidScanDone = FALSE;
-	}
-	if (legacy.ucSparseChannelValid == 1 &&
-		(legacy.ucCompleteChanCount !=
-			legacy.ucSparseChannelArrayValidNum)){
-		DBGLOG(NIC, ERROR,
-			"CompleteChnlCnt(%d) and ChnlArrNum(%d) are mismatched!\n"
-			, legacy.ucCompleteChanCount,
-			legacy.ucSparseChannelArrayValidNum);
-		fgIsValidScanDone = FALSE;
-	}
-
-	if (fgIsValidScanDone == TRUE)
-		scnEventScanDone(ad, &legacy, TRUE);
-
+	scnEventScanDone(ad, &legacy, TRUE);
 }
 
 uint32_t nicUniUpdateStaRecFastAll(
@@ -10532,30 +10551,6 @@ void nicUniEventSap(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 								&legacy);
 		}
 			break;
-#ifdef CFG_AP_GO_DELAY_CARRIER_ON
-		case UNI_EVENT_SAP_TAG_NOTIFY_AP_GO_STARTED: {
-			struct UNI_EVENT_NOTIFY_AP_GO_STARTED *started =
-				(struct UNI_EVENT_NOTIFY_AP_GO_STARTED *) tag;
-			struct MSG_P2P_NOTIFY_APGO_STARTED *prNotifyMsg = NULL;
-
-			prNotifyMsg = (struct MSG_P2P_NOTIFY_APGO_STARTED *)
-				cnmMemAlloc(ad, RAM_TYPE_MSG,
-					    sizeof(*prNotifyMsg));
-			if (!prNotifyMsg) {
-				DBGLOG(NIC, ERROR, "Alloc mem(%zu) failed\n",
-					sizeof(*prNotifyMsg));
-				break;
-			}
-
-			prNotifyMsg->rMsgHdr.eMsgId =
-				MID_MNY_P2P_NOTIFY_APGO_STARTED;
-			prNotifyMsg->ucBssIdx = started->ucBssIdx;
-			mboxSendMsg(ad, MBOX_ID_0,
-				    (struct MSG_HDR *)prNotifyMsg,
-				    MSG_SEND_METHOD_BUF);
-		}
-			break;
-#endif /* CFG_AP_GO_DELAY_CARRIER_ON */
 		default:
 			fail_cnt++;
 			ASSERT(fail_cnt < MAX_UNI_EVENT_FAIL_TAG_COUNT)
@@ -11068,37 +11063,6 @@ void nicUniEventStaRec(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
 			break;
 		case UNI_EVENT_STAREC_TAG_PN_INFO: {
 			// TODO: uni cmd
-		}
-			break;
-		case UNI_EVENT_STAREC_TAG_MLO_LINK_STATE: {
-#if (CFG_SUPPORT_802_11BE_MLO == 1)
-			struct UNI_EVENT_STAREC_MLO_LINK_STATE *state =
-			    (struct UNI_EVENT_STAREC_MLO_LINK_STATE *)tag;
-			struct STA_RECORD *prStaRec;
-			struct MLD_STA_RECORD *prMldStaRec;
-
-			DBGLOG(ML, INFO,
-				"widx=%d state=%d reason=%d\n",
-				common->u2WlanIdx, state->ucLinkState,
-				state->ucReason);
-
-			prStaRec = cnmGetStaRecByWlanIndex(ad,
-				common->u2WlanIdx);
-			prMldStaRec = mldStarecGetByStarec(ad, prStaRec);
-			if (prStaRec && prMldStaRec) {
-				if (state->ucLinkState == MLO_LINK_STATE_ACTIVE)
-					prMldStaRec->u4ActiveStaBitmap |=
-						BIT(prStaRec->ucIndex);
-				else
-					prMldStaRec->u4ActiveStaBitmap &=
-						~BIT(prStaRec->ucIndex);
-				DBGLOG(ML, INFO,
-					"bss=%d sta=%d widx=%d ActiveStaBitmap=0x%x\n",
-					prStaRec->ucBssIndex, prStaRec->ucIndex,
-					prStaRec->ucWlanIndex,
-					prMldStaRec->u4ActiveStaBitmap);
-			}
-#endif /* CFG_SUPPORT_802_11BE_MLO */
 		}
 			break;
 		default:
@@ -12423,65 +12387,6 @@ void nicUniEventEfuseFreeBlock(struct ADAPTER
 			       u4QueryInfoLen, WLAN_STATUS_SUCCESS);
 	}
 }
-
-#if (CFG_HW_DETECT_REPORT == 1)
-void nicUniEventHwDetectReport(struct ADAPTER *ad, struct WIFI_UNI_EVENT *evt)
-{
-	int32_t tags_len;
-	uint8_t *tag;
-	uint16_t offset = 0;
-	uint32_t fixed_len = sizeof(struct UNI_EVENT_HW_DETECT_REPORT);
-	uint32_t data_len = GET_UNI_EVENT_DATA_LEN(evt);
-	uint8_t *data = GET_UNI_EVENT_DATA(evt);
-	uint32_t fail_cnt = 0;
-	uint8_t	str_buf[HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN];
-
-	if (!ad->rWifiVar.fgHwDetectReportEn)
-		return;
-
-	/* underflow check */
-	if (data_len < fixed_len) {
-		DBGLOG(NIC, ERROR, "Invalid event data length:%d\n",
-			data_len);
-		return;
-	}
-
-	tags_len = data_len - fixed_len;
-	tag = data + fixed_len;
-	TAG_FOR_EACH(tag, tags_len, offset) {
-		switch (TAG_ID(tag)) {
-		case UNI_EVENT_HW_DETECT_REPORT_BASIC: {
-			struct UNI_EVENT_HW_DETECT_REPORT_PARAM
-				*hw_detect_report =
-				(struct UNI_EVENT_HW_DETECT_REPORT_PARAM *)tag;
-
-			if (snprintf(str_buf,
-				HW_DETECT_REPORT_STR_TO_NODE_MAX_LEN,
-				"[wlan]%s\n",
-				hw_detect_report->aucStrBuffer) < 0) {
-				DBGLOG(NIC, ERROR,
-			       "HW Detect Report: %s copy failure\n", str_buf);
-				return;
-			}
-
-			DBGLOG(NIC, INFO,
-				"HW Detect Report: %s\n", str_buf);
-			conn_dbg_add_log(CONN_DBG_LOG_TYPE_HW_ERR,
-				str_buf);
-
-			kalSendAeeWarning("WLAN", "HW Detect Report: %s\n",
-				str_buf);
-		}
-			break;
-		default:
-			fail_cnt++;
-			ASSERT(fail_cnt < MAX_UNI_EVENT_FAIL_TAG_COUNT)
-			DBGLOG(NIC, WARN, "invalid tag = %d\n", TAG_ID(tag));
-			break;
-		}
-	}
-}
-#endif /* CFG_HW_DETECT_REPORT */
 
 /*
  * \. Descrption : UNI_CMD UNI_CMD_ID_RX_HDR_TRAN

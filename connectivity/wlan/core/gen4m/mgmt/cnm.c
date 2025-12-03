@@ -1160,7 +1160,6 @@ void cnmCsaDoneEvent(struct ADAPTER *prAdapter,
 		prP2pBssInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE)
 		return;
 
-	DBGLOG(CNM, INFO, "notify csadone, policy.\n");
 	p2pFunChnlSwitchNotifyDone(prAdapter);
 }
 
@@ -1457,21 +1456,18 @@ void cnmIdcDetectHandler(struct ADAPTER *prAdapter,
 	uint8_t ucColdDownTime = 0;
 	struct WIFI_VAR *prWifiVar =
 		(struct WIFI_VAR *)NULL;
-	struct BSS_INFO *prBssInfo;
 #if CFG_TC10_FEATURE
+	struct BSS_INFO *prBssInfo;
 	struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo;
 #endif
 
-
+#if CFG_TC10_FEATURE
 	prBssInfo = cnmGetSapBssInfo(prAdapter);
-	if (!prBssInfo ||
-		kalP2pIsStoppingAp(prAdapter,
-		prBssInfo)) {
+	if (!prBssInfo) {
 		DBGLOG(CNM, WARN,
 			"[CSA]SoftAp Not Exist\n");
 		return;
 	}
-#if CFG_TC10_FEATURE
 	prP2pRoleFsmInfo = P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
 		prBssInfo->u4PrivateData);
 	if (!prP2pRoleFsmInfo) {
@@ -2365,11 +2361,6 @@ omac_choosed:
 				(PFN_MGMT_TIMEOUT_FUNC) rlmCsaTimeout,
 				(uintptr_t)ucBssIndex);
 
-			cnmTimerInitTimer(prAdapter,
-				&prBssInfo->rCsaDoneTimer,
-				(PFN_MGMT_TIMEOUT_FUNC) rlmCsaDoneTimeout,
-				(uintptr_t)ucBssIndex);
-
 			rlmResetCSAParams(prBssInfo, TRUE);
 			prBssInfo->fgIsAisSwitchingChnl = FALSE;
 #endif
@@ -2415,7 +2406,6 @@ void cnmFreeBssInfo(struct ADAPTER *prAdapter,
 
 #if CFG_SUPPORT_DFS
 	cnmTimerStopTimer(prAdapter, &prBssInfo->rCsaTimer);
-	cnmTimerStopTimer(prAdapter, &prBssInfo->rCsaDoneTimer);
 #endif
 	cnmTimerStopTimer(prAdapter, &prBssInfo->rObssScanTimer);
 

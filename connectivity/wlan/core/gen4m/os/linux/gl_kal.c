@@ -1770,12 +1770,6 @@ kalProcessRxPacket(struct GLUE_INFO *prGlueInfo,
 	uint32_t rStatus = WLAN_STATUS_SUCCESS;
 	struct sk_buff *skb = (struct sk_buff *)pvPacket;
 
-	if (!skb) {
-		RX_INC_CNT(&prGlueInfo->prAdapter->rRxCtrl,
-			RX_NULL_PACKET_COUNT);
-		return WLAN_STATUS_FAILURE;
-	}
-
 	skb->data = (unsigned char *)pucPacketStart;
 
 	/* Reset skb */
@@ -3732,27 +3726,6 @@ kalHardStartXmit(struct sk_buff *prOrgSkb,
 	}
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
-#if (CFG_SINGLE_BAND_MLSR_56 == 1)
-	if (prBssInfo) {
-		struct MLD_STA_RECORD *prMldStaRec;
-
-		prMldStaRec = mldStarecGetByStarec(prAdapter,
-			prBssInfo->prStaRecOfAP);
-		if (prMldStaRec && prMldStaRec->fgIsSbMlsr) {
-			struct STA_RECORD *prStaRec = cnmGetStaRecByWlanIndex(
-				prAdapter, prMldStaRec->u2SecondMldId);
-
-			/* only second link is active, change bssinfo */
-			if (prMldStaRec->u4ActiveStaBitmap ==
-			    BIT(prStaRec->ucIndex)) {
-				ucBssIndex = prStaRec->ucBssIndex;
-				prBssInfo = GET_BSS_INFO_BY_INDEX(
-					prAdapter, ucBssIndex);
-			}
-		}
-	}
-#endif /* CFG_SINGLE_BAND_MLSR_56 */
-
 	if (!prBssInfo) {
 		DBGLOG(INIT, INFO, "prBssInfo NULL for ucBssIndex:%u\n",
 			ucBssIndex);
@@ -4337,10 +4310,8 @@ kalSecurityFrameClassifier(struct GLUE_INFO *prGlueInfo,
 				GLUE_GET_PKT_BSS_IDX(prPacket),
 				aucLookAheadBuf);
 
-		if (((prStaRec && prStaRec->fgTransmitKeyExist &&
-				prStaRec->fgIsEapEncrypt) ||
-				(prStaRec && prStaRec->fgIsTxAllowed)) &&
-				(ucEAPoLKey != ETH_EAPOL_KEY)) {
+		if (prStaRec && prStaRec->fgTransmitKeyExist &&
+				prStaRec->fgIsEapEncrypt) {
 			/* Encrypt EAP frames if AIS connected and with a key */
 			DBGLOG(TX, INFO, "Encrypt EAP packets\n");
 		} else {

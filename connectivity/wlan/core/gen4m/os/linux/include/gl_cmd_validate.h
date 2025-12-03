@@ -396,7 +396,7 @@
 #define CMD_REPORT_VENDOR_SPECIFIED		"EnVendorSpecifiedRpt"
 #define CMD_FORCE_STBC				"FORCE_STBC"
 #define CMD_FORCE_MRC				"FORCE_MRC"
-#define CMD_SET_CUSTOM_TX_POWER_CALLING         "SET_CUSTOM_TX_POWER_CALLING"
+
 /*****************************************************************************
 *                             D A T A   T Y P E S
 ******************************************************************************
